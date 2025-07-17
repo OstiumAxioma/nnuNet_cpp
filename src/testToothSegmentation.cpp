@@ -1,12 +1,18 @@
-ï»¿// testToothSegmentation.cpp : æ­¤æ–‡ä»¶åŒ…å« "main" å‡½æ•°ã€‚ç¨‹åºæ‰§è¡Œå°†åœ¨æ­¤å¤„å¼€å§‹å¹¶ç»“æŸã€‚
+// testToothSegmentation.cpp : ´ËÎÄ¼ş°üº¬ "main" º¯Êı¡£³ÌĞòÖ´ĞĞ½«ÔÚ´Ë´¦¿ªÊ¼²¢½áÊø¡£
 //
 
 #include <iostream>
 #include <memory>
 #include <chrono>
+#include <windows.h>
+#include <exception>
+#include <csignal>
+#include <typeinfo>
+#include <clocale>
+#include <cstdlib>
 
 
-// onnx é…ç½®
+// onnx ÅäÖÃ
 #include "..\header\DentalCbctSegAI_API.h"
 #include "..\lib\onnxruntime\include\onnxruntime_cxx_api.h"
 #pragma comment(lib, "..\\lib\\DentalCbctOnnxSegDLL.lib")
@@ -18,7 +24,7 @@
 
 
 /*
-// libtorch 231 é…ç½®
+// libtorch 231 ÅäÖÃ
 #include "DentalCbctSegAI_API.h"
 #pragma comment(lib, "..\\x64\\Release\\DentalCbctSegDLL.lib")
 
@@ -41,18 +47,99 @@
 //230
 //" /INCLUDE:?warp_size@cuda@at@@YAHXZ /INCLUDE:"?ignore_this_library_placeholder@@YAHXZ" "
 
-//CImgç”¨äºè¯»å…¥å­˜å‚¨ä½“æ•°æ®
+//CImgÓÃÓÚ¶ÁÈë´æ´¢ÌåÊı¾İ
 #define cimg_display_type 2
 #include "..\lib\CImg\CImg.h"
 
 using namespace std;
 using namespace cimg_library;
 
+// ĞÅºÅ´¦Àíº¯Êı
+void SignalHandler(int signal) {
+    std::cerr << "\n===== Program Exception =====" << std::endl;
+    std::cerr << "Signal: " << signal << std::endl;
+    switch(signal) {
+        case SIGSEGV:
+            std::cerr << "Segmentation fault (SIGSEGV)" << std::endl;
+            break;
+        case SIGFPE:
+            std::cerr << "Floating point exception (SIGFPE)" << std::endl;
+            break;
+        case SIGILL:
+            std::cerr << "Illegal instruction (SIGILL)" << std::endl;
+            break;
+        case SIGABRT:
+            std::cerr << "Program abort (SIGABRT)" << std::endl;
+            break;
+    }
+    system("pause");
+    exit(1);
+}
+
+// SEHÒì³£¹ıÂËÆ÷
+LONG WINAPI MyUnhandledExceptionFilter(EXCEPTION_POINTERS* pExceptionInfo) {
+    std::cerr << "\n===== Unhandled SEH Exception =====" << std::endl;
+    std::cerr << "Exception Code: 0x" << std::hex << pExceptionInfo->ExceptionRecord->ExceptionCode << std::dec << std::endl;
+    
+    switch(pExceptionInfo->ExceptionRecord->ExceptionCode) {
+        case EXCEPTION_ACCESS_VIOLATION:
+            std::cerr << "Access Violation" << std::endl;
+            break;
+        case EXCEPTION_STACK_OVERFLOW:
+            std::cerr << "Stack Overflow" << std::endl;
+            break;
+        case 0xE06D7363:
+            std::cerr << "C++ Exception (0xE06D7363)" << std::endl;
+            break;
+    }
+    
+    system("pause");
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// µ¥¶ÀµÄº¯ÊıÓÃÓÚÖ´ĞĞ¿ÉÄÜÅ×³öSEHÒì³£µÄ´úÂë
+int SafeInfer(AI_HANDLE AI_Hdl, AI_DataInfo* srcData, AI_INT& AIWorkStatus) {
+    __try {
+        AIWorkStatus = DentalCbctSegAI_Infer(AI_Hdl, srcData);
+        return 0; // ³É¹¦
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+        DWORD exceptionCode = GetExceptionCode();
+        std::cerr << "\n===== SEH Exception in DentalCbctSegAI_Infer =====" << std::endl;
+        std::cerr << "Exception Code: 0x" << std::hex << exceptionCode << std::dec << std::endl;
+        
+        if (exceptionCode == 0xE06D7363) {
+            std::cerr << "DLLÄÚ²¿Å×³öÁËC++Òì³£" << std::endl;
+            // Êµ¼ÊµÄ´íÎóĞÅÏ¢Ó¦¸ÃÔÚDLLµÄÊä³öÈÕÖ¾ÖĞ
+        }
+        
+        return -1; // Ê§°Ü
+    }
+}
+
 int main()
-{
-	//load raw volume data: ç‰™é½¿åœ¨å‰ï¼Œåè„‘å‹ºåœ¨åï¼›è€³æœµåœ¨å·¦å³ï¼›ä¸‹å·´åœ¨ä¸Šï¼Œå¤´é¡¶åœ¨ä¸‹
-	CImg<short> inputCbctVolume;
-	inputCbctVolume.load_analyze("..\\..\\..\\img\\Series_5_Acq_2_0000.hdr");
+{	
+	// ÉèÖÃlocaleÒÔÖ§³ÖÖĞÎÄ
+	//setlocale(LC_ALL, "chs");
+	
+	
+	// °²×°ĞÅºÅ´¦ÀíÆ÷
+	signal(SIGSEGV, SignalHandler);
+	signal(SIGFPE, SignalHandler);
+	signal(SIGILL, SignalHandler);
+	signal(SIGABRT, SignalHandler);
+	
+	// ÉèÖÃSEHÒì³£´¦ÀíÆ÷
+	SetUnhandledExceptionFilter(MyUnhandledExceptionFilter);
+	
+	try {
+		std::cout << "³ÌĞò¿ªÊ¼ÔËĞĞ..." << std::endl;
+		
+		//load raw volume data: ÑÀ³İÔÚÇ°£¬ºóÄÔÉ×ÔÚºó£»¶ú¶äÔÚ×óÓÒ£»ÏÂ°ÍÔÚÉÏ£¬Í·¶¥ÔÚÏÂ
+		std::cout << "ÕıÔÚ¼ÓÔØHDRÍ¼ÏñÎÄ¼ş..." << std::endl;
+		CImg<short> inputCbctVolume;
+		inputCbctVolume.load_analyze("..\\..\\..\\img\\Series_5_Acq_2_0000.hdr");
+		std::cout << "HDRÎÄ¼ş¼ÓÔØ³É¹¦" << std::endl;
 
 	float VoxelSpacing  = 1.0f; //unit: mm  0.3
 	float VoxelSpacingX = 0.5810545086860657f; //unit: mm  0.3
@@ -63,16 +150,16 @@ int main()
 	int Height0 = inputCbctVolume.height();
 	int Depth0 = inputCbctVolume.depth();
 
-	//æ£€æŸ¥sliceæ–¹ä½ï¼Œæ˜¾ç¤ºå›¾åƒä¸­ç‰™é½¿åº”åœ¨ä¸Šæ–¹
-	//å¦‚æœç‰™é½¿æ–¹ä½ä¸å¯¹ï¼Œå¯é€šè¿‡rotate XY 90ã€180ã€-90åº¦è¿›è¡Œè°ƒæ•´
+	//¼ì²éslice·½Î»£¬ÏÔÊ¾Í¼ÏñÖĞÑÀ³İÓ¦ÔÚÉÏ·½
+	//Èç¹ûÑÀ³İ·½Î»²»¶Ô£¬¿ÉÍ¨¹ırotate XY 90¡¢180¡¢-90¶È½øĞĞµ÷Õû
 	//inputCbctVolume.rotate(180); //90, -90, 180
 	//inputCbctVolume -= 1024;
 
 	//CImg<short> slice_z = inputCbctVolume.get_slice( Depth0 / 2);
 	//slice_z.display("slice 120");
-	//å…³é—­æ˜¾ç¤ºçª—å£åï¼Œç¨‹åºç»§ç»­è¿è¡Œ
+	//¹Ø±ÕÏÔÊ¾´°¿Úºó£¬³ÌĞò¼ÌĞøÔËĞĞ
 
-	//è®¾ç½®è¾“å…¥ä½“æ•°æ®ä¿¡æ¯
+	//ÉèÖÃÊäÈëÌåÊı¾İĞÅÏ¢
 	short* ptrCbctData = inputCbctVolume.data();
 	AI_DataInfo *srcData = (AI_DataInfo*)malloc(sizeof(AI_DataInfo));
 	srcData->Width = Width0;
@@ -82,9 +169,9 @@ int main()
 	srcData->VoxelSpacingX = VoxelSpacingX;
 	srcData->VoxelSpacingY = VoxelSpacingY;
 	srcData->VoxelSpacingZ = VoxelSpacingZ;
-	srcData->ptr_Data = ptrCbctData; //CBCTä½“æ•°æ®æŒ‡é’ˆ
+	srcData->ptr_Data = ptrCbctData; //CBCTÌåÊı¾İÖ¸Õë
 
-	//åˆå§‹åŒ–ç‰™é½¿åˆ†å‰²ç»“æœæ•°æ®ä¿¡æ¯
+	//³õÊ¼»¯ÑÀ³İ·Ö¸î½á¹ûÊı¾İĞÅÏ¢
 	CImg<short> toothLabelMask = CImg<short>(Width0, Height0, Depth0, 1, 0);
 
 	AI_DataInfo *toothSegData = (AI_DataInfo*)malloc(sizeof(AI_DataInfo));
@@ -95,44 +182,75 @@ int main()
 	toothSegData->VoxelSpacingX = VoxelSpacingX;
 	toothSegData->VoxelSpacingY = VoxelSpacingY;
 	toothSegData->VoxelSpacingZ = VoxelSpacingZ;
-	toothSegData->ptr_Data = toothLabelMask.data();//åˆ†å‰²labelä½“æ•°æ®æŒ‡é’ˆ
+	toothSegData->ptr_Data = toothLabelMask.data();//·Ö¸îlabelÌåÊı¾İÖ¸Õë
 
 
 	auto start = std::chrono::steady_clock::now();
 
-	//è°ƒç”¨ç‰™é½¿åˆ†å‰²æ¨¡å‹
-	//åˆå§‹åŒ–åˆ†å‰²æ¨¡å‹å¯¹è±¡
+	//µ÷ÓÃÑÀ³İ·Ö¸îÄ£ĞÍ
+	//³õÊ¼»¯·Ö¸îÄ£ĞÍ¶ÔÏó
+	std::cout << "\nInitializing segmentation model..." << std::endl;
 	AI_HANDLE  AI_Hdl = DentalCbctSegAI_CreateObj();
-	if (AI_Hdl == NULL)
-		return DentalCbctSegAI_STATUS_HANDLE_NULL; //æ¨¡å‹åˆå§‹åŒ–å¤±è´¥
+	if (AI_Hdl == NULL) {
+		std::cerr << "Error: Model initialization failed!" << std::endl;
+		return DentalCbctSegAI_STATUS_HANDLE_NULL; //Ä£ĞÍ³õÊ¼»¯Ê§°Ü
+	}
+	std::cout << "Model initialized successfully" << std::endl;
 
+	std::cout << "Setting model path..." << std::endl;
 	AI_INT status1 = DentalCbctSegAI_SetModelPath(AI_Hdl, const_cast<char*>("..\\..\\..\\model\\kneeseg_test.onnx"));
+	std::cout << "SetModelPath·µ»Ø×´Ì¬: " << status1 << std::endl;
 
-	AI_INT status2 = DentalCbctSegAI_SetTileStepRatio(AI_Hdl, 0.5f);
+	// ÉèÖÃTileStepRatio
+	float tileRatio = 0.5f;
+	AI_INT status2 = DentalCbctSegAI_SetTileStepRatio(AI_Hdl, tileRatio);
+	std::cout << "SetTileStepRatio(" << tileRatio << ")·µ»Ø×´Ì¬: " << status2 << std::endl;
 
-	// è°ƒç”¨æ¨¡å‹æ¨ç†ï¼Œå¹¶æ•è· ONNX Runtime å¼‚å¸¸
-	AI_INT	AIWorkStatus = DentalCbctSegAI_Infer(AI_Hdl, srcData);
+	// ´òÓ¡ÊäÈëÊı¾İĞÅÏ¢
+	std::cout << "\nÊäÈëÊı¾İĞÅÏ¢:" << std::endl;
+	std::cout << "  ³ß´ç: " << srcData->Width << " x " << srcData->Height << " x " << srcData->Depth << std::endl;
+	std::cout << "  ÌåËØ¼ä¾à: X=" << srcData->VoxelSpacingX << ", Y=" << srcData->VoxelSpacingY << ", Z=" << srcData->VoxelSpacingZ << std::endl;
+	std::cout << "  Êı¾İÖ¸Õë: " << (void*)srcData->ptr_Data << std::endl;
+
+	// µ÷ÓÃÄ£ĞÍÍÆÀí£¬²¢²¶»ñ ONNX Runtime Òì³£
+	std::cout << "\n¿ªÊ¼Ä£ĞÍÍÆÀí..." << std::endl;
+	
+	AI_INT	AIWorkStatus = DentalCbctSegAI_STATUS_FAIED;
+	int result = SafeInfer(AI_Hdl, srcData, AIWorkStatus);
+	
+	if (result != 0) {
+		// SEHÒì³£·¢Éú
+		// ÊÍ·Å×ÊÔ´
+		if (AI_Hdl) DentalCbctSegAI_ReleseObj(AI_Hdl);
+		if (srcData) free(srcData);
+		if (toothSegData) free(toothSegData);
+		
+		system("pause");
+		return -7001;
+	}
+	
+	std::cout << "Ä£ĞÍÍÆÀíÍê³É£¬×´Ì¬Âë: " << AIWorkStatus << std::endl;
 	
 
-	//è·å–ç‰™é½¿åˆ†å‰²ç»“æœ
+	//»ñÈ¡ÑÀ³İ·Ö¸î½á¹û
 	if (AIWorkStatus == DentalCbctSegAI_STATUS_SUCCESS)
 		DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
 	else
 		return AIWorkStatus;
 
-	//é‡Šæ”¾å¯¹è±¡
+	//ÊÍ·Å¶ÔÏó
 	DentalCbctSegAI_ReleseObj(AI_Hdl);
-	// ç‰™é½¿åˆ†å‰²è¿‡ç¨‹ç»“æŸ
+	// ÑÀ³İ·Ö¸î¹ı³Ì½áÊø
 
-	//è¾“å‡ºç»“æœtoothSegDataè¯´æ˜ï¼š
-	//å¯¹äºå°è§†é‡CBCTï¼š
-    //totalToothNumber:åˆ†å‰²çš„ç‰™é½¿æ€»æ•°
-    //ç‰™é½¿ç¼–å·k=1,2,3,...,totalToothNumberï¼Œç‰™é«“labelä¸º3kã€ç‰™æœ¬è´¨labelä¸º3k+1ã€ç‰™å† æˆ–é‡‘å±æ¤å…¥ç‰©labelä¸º3k+2
-    //å¯¹äºå¤§è§†é‡CBCTï¼š
-    //upperToothNumber:ä¸Šç‰™æ•°é‡
-    //lower_tooth_number:ä¸‹ç‰™æ•°é‡
-    //ä¸Šç‰™é½¿ç¼–å·k=1,2,3,...,upperToothNumberï¼Œç‰™é«“labelä¸º3kã€ç‰™æœ¬è´¨labelä¸º3k+1ã€ç‰™å† æˆ–é‡‘å±æ¤å…¥ç‰©labelä¸º3k+2
-    //ä¸‹ç‰™é½¿ç¼–å·k=-1,-2,-3,...,-lowerToothNumberï¼Œç‰™é«“labelä¸º-3kã€ç‰™æœ¬è´¨labelä¸º-3k-1ã€ç‰™å† æˆ–é‡‘å±æ¤å…¥ç‰©labelä¸º-3k-2
+	//Êä³ö½á¹ûtoothSegDataËµÃ÷£º
+	//¶ÔÓÚĞ¡ÊÓÒ°CBCT£º
+    //totalToothNumber:·Ö¸îµÄÑÀ³İ×ÜÊı
+    //ÑÀ³İ±àºÅk=1,2,3,...,totalToothNumber£¬ÑÀËèlabelÎª3k¡¢ÑÀ±¾ÖÊlabelÎª3k+1¡¢ÑÀ¹Ú»ò½ğÊôÖ²ÈëÎïlabelÎª3k+2
+    //¶ÔÓÚ´óÊÓÒ°CBCT£º
+    //upperToothNumber:ÉÏÑÀÊıÁ¿
+    //lower_tooth_number:ÏÂÑÀÊıÁ¿
+    //ÉÏÑÀ³İ±àºÅk=1,2,3,...,upperToothNumber£¬ÑÀËèlabelÎª3k¡¢ÑÀ±¾ÖÊlabelÎª3k+1¡¢ÑÀ¹Ú»ò½ğÊôÖ²ÈëÎïlabelÎª3k+2
+    //ÏÂÑÀ³İ±àºÅk=-1,-2,-3,...,-lowerToothNumber£¬ÑÀËèlabelÎª-3k¡¢ÑÀ±¾ÖÊlabelÎª-3k-1¡¢ÑÀ¹Ú»ò½ğÊôÖ²ÈëÎïlabelÎª-3k-2
 	
 
 	auto end = std::chrono::steady_clock::now();
@@ -143,10 +261,44 @@ int main()
 	//mask_z.display("mask 205");
 
 
-	//ä¿å­˜åˆ†å‰²ç»“æœ
+	//±£´æ·Ö¸î½á¹û
 	//inputCbctVolume.save_analyze("inputCbctVolume.hdr");
 	toothLabelMask.save_analyze("finalLabelMask.hdr");
 
-	return AIWorkStatus;
+		std::cout << "\n³ÌĞòÖ´ĞĞ³É¹¦Íê³É!" << std::endl;
+		return AIWorkStatus;
+		
+	} catch (const CImgIOException& e) {
+		std::cerr << "\n===== CImg IOÒì³£ =====" << std::endl;
+		std::cerr << "´íÎóĞÅÏ¢: " << e.what() << std::endl;
+		system("pause");
+		return -2001;
+	} catch (const CImgException& e) {
+		std::cerr << "\n===== CImgÒì³£ =====" << std::endl;
+		std::cerr << "´íÎóĞÅÏ¢: " << e.what() << std::endl;
+		system("pause");
+		return -2002;
+	} catch (const Ort::Exception& e) {
+		std::cerr << "\n===== ONNX RuntimeÒì³£ =====" << std::endl;
+		std::cerr << "´íÎóĞÅÏ¢: " << e.what() << std::endl;
+		system("pause");
+		return -3001;
+	} catch (const std::bad_alloc& e) {
+		std::cerr << "\n===== ÄÚ´æ·ÖÅäÊ§°Ü =====" << std::endl;
+		std::cerr << "´íÎóĞÅÏ¢: " << e.what() << std::endl;
+		system("pause");
+		return -4001;
+	} catch (const std::exception& e) {
+		std::cerr << "\n===== ±ê×¼Òì³£ =====" << std::endl;
+		std::cerr << "Òì³£ÀàĞÍ: " << typeid(e).name() << std::endl;
+		std::cerr << "´íÎóĞÅÏ¢: " << e.what() << std::endl;
+		system("pause");
+		return -5001;
+	} catch (...) {
+		std::cerr << "\n===== Î´ÖªÒì³£ =====" << std::endl;
+		std::cerr << "²¶»ñµ½Î´ÖªÀàĞÍµÄÒì³£" << std::endl;
+		system("pause");
+		return -6001;
+	}
 }
 

@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <map>
-#include <onnxruntime_cxx_api.h>
+#include "../../lib/onnxruntime/include/onnxruntime_cxx_api.h"
 
 #define cimg_display_type 2
 #include "../../lib/CImg/CImg.h"
@@ -59,7 +59,8 @@ public:
 
 	static DentalUnet *CreateDentalUnet();
 
-	void    setModelFns(const wchar_t* model_fn);
+	void    setModelFns(const char* model_fn);
+	void    setModelFns(const wchar_t* model_fn);  // Keep for backward compatibility
 
 	void    setStepSizeRatio(float ratio);
 

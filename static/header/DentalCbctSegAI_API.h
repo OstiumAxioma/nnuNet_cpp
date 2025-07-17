@@ -32,7 +32,7 @@ typedef int              AI_INT;
 typedef float            AI_FLOAT;
 typedef void             AI_VOID;
 typedef void*            AI_HANDLE;
-typedef wchar_t*         AI_STRING;
+typedef char*            AI_STRING;
 
 
 //�����ݽṹ

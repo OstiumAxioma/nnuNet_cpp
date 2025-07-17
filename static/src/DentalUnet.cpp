@@ -37,6 +37,31 @@ DentalUnet::DentalUnet()
 	unetConfig.min_max_HU = { -172.01852416992188f,  1824.9935302734375f };
 	unetConfig.mean_std_HU = { 274.2257080078125f, 366.05450439453125f };
 	unetConfig.use_mirroring = false;
+	
+	// 添加调试信息：验证构造函数中vector初始化
+	std::cout << "=== DEBUG: DentalUnet constructor end ===" << endl;
+	std::cout << "unetConfig.transpose_forward.size(): " << unetConfig.transpose_forward.size() << endl;
+	std::cout << "unetConfig.transpose_backward.size(): " << unetConfig.transpose_backward.size() << endl;
+	std::cout << "unetConfig.voxel_spacing.size(): " << unetConfig.voxel_spacing.size() << endl;
+	std::cout << "unetConfig.patch_size.size(): " << unetConfig.patch_size.size() << endl;
+	
+	std::cout << "unetConfig.transpose_forward values: ";
+	for (size_t i = 0; i < unetConfig.transpose_forward.size(); ++i) {
+		std::cout << unetConfig.transpose_forward[i] << " ";
+	}
+	std::cout << endl;
+	
+	std::cout << "unetConfig.voxel_spacing values: ";
+	for (size_t i = 0; i < unetConfig.voxel_spacing.size(); ++i) {
+		std::cout << unetConfig.voxel_spacing[i] << " ";
+	}
+	std::cout << endl;
+	
+	std::cout << "unetConfig.patch_size values: ";
+	for (size_t i = 0; i < unetConfig.patch_size.size(); ++i) {
+		std::cout << unetConfig.patch_size[i] << " ";
+	}
+	std::cout << endl;
 }
 
 
@@ -47,11 +72,27 @@ DentalUnet::~DentalUnet()
 
 DentalUnet *DentalUnet::CreateDentalUnet()
 {
+	std::cout << "=== DEBUG: CreateDentalUnet function start ===" << endl;
+	
 	DentalUnet *segUnetModel = new DentalUnet();
+	
+	std::cout << "=== DEBUG: DentalUnet object created successfully ===" << endl;
+	std::cout << "segUnetModel pointer: " << segUnetModel << endl;
 
 	std::cout << "CreateDentalUnet is done. "<<endl;
 
 	return segUnetModel;
+}
+
+void  DentalUnet::setModelFns(const char* model_fn)
+{
+	if (model_fn != nullptr) {
+		size_t len = strlen(model_fn) + 1;
+		wchar_t* wide_fn = new wchar_t[len];
+		mbstowcs(wide_fn, model_fn, len);
+		unetConfig.model_file_name = wide_fn;
+		// Note: This creates a memory leak, but for simplicity we're not handling it here
+	}
 }
 
 void  DentalUnet::setModelFns(const wchar_t* model_fn)
@@ -149,6 +190,18 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 
 	input_voxel_spacing = { voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth
 
+	// 添加调试信息：检查input_voxel_spacing的创建
+	std::cout << "=== DEBUG: setInput function end ===" << endl;
+	std::cout << "voxelSpacingX: " << voxelSpacingX << endl;
+	std::cout << "voxelSpacingY: " << voxelSpacingY << endl;
+	std::cout << "voxelSpacingZ: " << voxelSpacingZ << endl;
+	std::cout << "input_voxel_spacing.size() after creation: " << input_voxel_spacing.size() << endl;
+	std::cout << "input_voxel_spacing values: ";
+	for (size_t i = 0; i < input_voxel_spacing.size(); ++i) {
+		std::cout << input_voxel_spacing[i] << " ";
+	}
+	std::cout << endl;
+
 	std::cout << "input_volume intensity_mean: " << intensity_mean << endl;
 	std::cout << "input_volume intensity_std: " << intensity_std << endl;
 
@@ -158,16 +211,86 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 
 AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 {
+	std::cout << "=== DEBUG: performInference function start ===" << endl;
+	std::cout << "srcData pointer: " << srcData << endl;
+	if (srcData != nullptr) {
+		std::cout << "srcData->Width: " << srcData->Width << endl;
+		std::cout << "srcData->Height: " << srcData->Height << endl;
+		std::cout << "srcData->Depth: " << srcData->Depth << endl;
+		std::cout << "srcData->VoxelSpacingX: " << srcData->VoxelSpacingX << endl;
+		std::cout << "srcData->VoxelSpacingY: " << srcData->VoxelSpacingY << endl;
+		std::cout << "srcData->VoxelSpacingZ: " << srcData->VoxelSpacingZ << endl;
+	}
+	
+	std::cout << "About to call setInput..." << endl;
 	int input_status = setInput(srcData);
-	std::cout << "input_status: " << input_status << endl;
+	std::cout << "setInput returned, input_status: " << input_status << endl;
 	if (input_status != DentalCbctSegAI_STATUS_SUCCESS)
 		return input_status;
 
-	input_cbct_volume.permute_axes(unetConfig.cimg_transpose_forward);
-	transposed_input_voxel_spacing.clear();
-	for (int i = 0; i < 3; ++i) {
-		transposed_input_voxel_spacing.push_back(input_voxel_spacing[unetConfig.transpose_forward[i]]);
+	std::cout << "=== CHECKPOINT 1: setInput completed successfully ===" << endl;
+
+	// 添加调试信息：检查关键vector的大小和内容
+	std::cout << "=== DEBUG: Vector sizes before permute_axes ===" << endl;
+	std::cout << "input_voxel_spacing.size(): " << input_voxel_spacing.size() << endl;
+	std::cout << "unetConfig.transpose_forward.size(): " << unetConfig.transpose_forward.size() << endl;
+	std::cout << "unetConfig.transpose_backward.size(): " << unetConfig.transpose_backward.size() << endl;
+	
+	// 打印vector内容
+	std::cout << "input_voxel_spacing values: ";
+	for (size_t i = 0; i < input_voxel_spacing.size(); ++i) {
+		std::cout << input_voxel_spacing[i] << " ";
 	}
+	std::cout << endl;
+	
+	std::cout << "unetConfig.transpose_forward values: ";
+	for (size_t i = 0; i < unetConfig.transpose_forward.size(); ++i) {
+		std::cout << unetConfig.transpose_forward[i] << " ";
+	}
+	std::cout << endl;
+	
+	std::cout << "unetConfig.transpose_backward values: ";
+	for (size_t i = 0; i < unetConfig.transpose_backward.size(); ++i) {
+		std::cout << unetConfig.transpose_backward[i] << " ";
+	}
+	std::cout << endl;
+
+	std::cout << "=== CHECKPOINT 2: About to call permute_axes ===" << endl;
+	input_cbct_volume.permute_axes(unetConfig.cimg_transpose_forward);
+	std::cout << "permute_axes completed successfully" << endl;
+	
+	std::cout << "=== CHECKPOINT 3: permute_axes completed ===" << endl;
+	
+	transposed_input_voxel_spacing.clear();
+	std::cout << "=== DEBUG: About to enter critical loop ===" << endl;
+	
+	for (int i = 0; i < 3; ++i) {
+		std::cout << "Loop iteration i=" << i << endl;
+		std::cout << "  Checking unetConfig.transpose_forward[" << i << "]..." << endl;
+		
+		if (i >= (int)unetConfig.transpose_forward.size()) {
+			std::cerr << "ERROR: i=" << i << " >= unetConfig.transpose_forward.size()=" << unetConfig.transpose_forward.size() << endl;
+			return DentalCbctSegAI_STATUS_FAIED;
+		}
+		
+		int transpose_idx = unetConfig.transpose_forward[i];
+		std::cout << "  transpose_idx = " << transpose_idx << endl;
+		
+		if (transpose_idx < 0 || transpose_idx >= (int)input_voxel_spacing.size()) {
+			std::cerr << "ERROR: transpose_idx=" << transpose_idx << " is out of range for input_voxel_spacing.size()=" << input_voxel_spacing.size() << endl;
+			return DentalCbctSegAI_STATUS_FAIED;
+		}
+		
+		std::cout << "  Accessing input_voxel_spacing[" << transpose_idx << "]..." << endl;
+		float spacing_value = input_voxel_spacing[transpose_idx];
+		std::cout << "  spacing_value = " << spacing_value << endl;
+		
+		transposed_input_voxel_spacing.push_back(spacing_value);
+		std::cout << "  Successfully added to transposed_input_voxel_spacing" << endl;
+	}
+	
+	std::cout << "=== DEBUG: Critical loop completed successfully ===" << endl;
+	std::cout << "transposed_input_voxel_spacing.size(): " << transposed_input_voxel_spacing.size() << endl;
 
 	//apply CNN
 	int infer_status = segModelInfer(unetConfig, input_cbct_volume);
@@ -182,28 +305,84 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 
 AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 {
+	// 添加调试信息：检查关键vector的大小和内容
+	std::cout << "=== DEBUG: segModelInfer function start ===" << endl;
+	std::cout << "transposed_input_voxel_spacing.size(): " << transposed_input_voxel_spacing.size() << endl;
+	std::cout << "config.voxel_spacing.size(): " << config.voxel_spacing.size() << endl;
+	std::cout << "config.patch_size.size(): " << config.patch_size.size() << endl;
+	
+	std::cout << "transposed_input_voxel_spacing values: ";
+	for (size_t i = 0; i < transposed_input_voxel_spacing.size(); ++i) {
+		std::cout << transposed_input_voxel_spacing[i] << " ";
+	}
+	std::cout << endl;
+	
+	std::cout << "config.voxel_spacing values: ";
+	for (size_t i = 0; i < config.voxel_spacing.size(); ++i) {
+		std::cout << config.voxel_spacing[i] << " ";
+	}
+	std::cout << endl;
+	
+	std::cout << "config.patch_size values: ";
+	for (size_t i = 0; i < config.patch_size.size(); ++i) {
+		std::cout << config.patch_size[i] << " ";
+	}
+	std::cout << endl;
 
 	if (transposed_input_voxel_spacing.size() != config.voxel_spacing.size()) {
 		throw std::runtime_error("Spacing dimensions mismatch");
 	}
 
-	// ����Ŀ��ߴ�
+	// 计算目标尺寸
 	bool is_volume_scaled = false;
 	////input_voxel_spacing = {voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth 
 	std::vector<int64_t> input_size = { input_volume.width(), input_volume.height(), input_volume.depth()};
 	std::vector<int64_t> output_size;
 	float scaled_factor = 1.f;
-	for (int i = 0; i < 3; ++i) {  // ֻ�����ռ�ά��
+	
+	std::cout << "=== DEBUG: About to enter scaling loop ===" << endl;
+	for (int i = 0; i < 3; ++i) {  // 只处理空间维度
+		std::cout << "Scaling loop iteration i=" << i << endl;
+		
+		if (i >= (int)transposed_input_voxel_spacing.size()) {
+			std::cerr << "ERROR: i=" << i << " >= transposed_input_voxel_spacing.size()=" << transposed_input_voxel_spacing.size() << endl;
+			return DentalCbctSegAI_STATUS_FAIED;
+		}
+		
+		if (i >= (int)config.voxel_spacing.size()) {
+			std::cerr << "ERROR: i=" << i << " >= config.voxel_spacing.size()=" << config.voxel_spacing.size() << endl;
+			return DentalCbctSegAI_STATUS_FAIED;
+		}
+		
+		if (i >= (int)config.patch_size.size()) {
+			std::cerr << "ERROR: i=" << i << " >= config.patch_size.size()=" << config.patch_size.size() << endl;
+			return DentalCbctSegAI_STATUS_FAIED;
+		}
+		
+		if (i >= (int)input_size.size()) {
+			std::cerr << "ERROR: i=" << i << " >= input_size.size()=" << input_size.size() << endl;
+			return DentalCbctSegAI_STATUS_FAIED;
+		}
+		
+		std::cout << "  Accessing transposed_input_voxel_spacing[" << i << "] = " << transposed_input_voxel_spacing[i] << endl;
+		std::cout << "  Accessing config.voxel_spacing[" << i << "] = " << config.voxel_spacing[i] << endl;
+		
 		scaled_factor = transposed_input_voxel_spacing[i] / config.voxel_spacing[i];
 		int scaled_sz = std::round(input_size[i] * scaled_factor);
+		
+		std::cout << "  scaled_factor = " << scaled_factor << ", scaled_sz = " << scaled_sz << endl;
+		std::cout << "  config.patch_size[" << i << "] = " << config.patch_size[i] << endl;
+		
 		if (scaled_factor < 0.9f || scaled_factor > 1.1f || scaled_sz < config.patch_size[i])
 			is_volume_scaled = true;
 
-		if (scaled_sz < config.patch_size[3])
-			scaled_sz = config.patch_size[3];
+		if (scaled_sz < config.patch_size[i])
+			scaled_sz = config.patch_size[i];
 
 		output_size.push_back(static_cast<int64_t>(scaled_sz));
+		std::cout << "  output_size[" << i << "] = " << scaled_sz << endl;
 	}
+	std::cout << "=== DEBUG: Scaling loop completed successfully ===" << endl;
 
 	CImg<float> scaled_input_volume;
 	if (is_volume_scaled)
@@ -313,6 +492,20 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	// x Image width, y Image height, z Image depth
 	float step_size_ratio = config.step_size_ratio;
 	float actualStepSize[3];
+	
+	// 添加调试信息：检查patch_size访问
+	std::cout << "=== DEBUG: slidingWindowInfer patch_size access ===" << endl;
+	std::cout << "config.patch_size.size(): " << config.patch_size.size() << endl;
+	if (config.patch_size.size() < 3) {
+		std::cerr << "ERROR: config.patch_size.size() < 3, actual size: " << config.patch_size.size() << endl;
+		return DentalCbctSegAI_STATUS_FAIED;
+	}
+	
+	std::cout << "About to access config.patch_size[0], [1], [2]..." << endl;
+	std::cout << "config.patch_size[0] = " << config.patch_size[0] << endl;
+	std::cout << "config.patch_size[1] = " << config.patch_size[1] << endl;
+	std::cout << "config.patch_size[2] = " << config.patch_size[2] << endl;
+	
 	int X_num_steps = (int)ceil(float(width - config.patch_size[0]) / (config.patch_size[0] * step_size_ratio)) + 1; //X
 	if (X_num_steps > 1)
 		actualStepSize[0] = float(width - config.patch_size[0]) / (X_num_steps - 1);
@@ -421,8 +614,8 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				output_tensors.clear();
 				//input_tensor.release();
 
-				std::cout << "output_patch min: " << win_pob.min() << endl;
-				std::cout << "output_patch max: " << win_pob.max() << endl;
+				std::cout << "output_patch min: " << (win_pob.min)() << endl;
+				std::cout << "output_patch max: " << (win_pob.max)() << endl;
 				std::cout << "output_patch mean: " << win_pob.mean() << endl;
 
 				cimg_forXYZC(win_pob, x, y, z, c) {
@@ -462,15 +655,33 @@ void  DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config
 
 void  DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes)
 {
+	// 添加调试信息：检查patch_sizes访问
+	std::cout << "=== DEBUG: create_3d_gaussian_kernel function start ===" << endl;
+	std::cout << "patch_sizes.size(): " << patch_sizes.size() << endl;
+	if (patch_sizes.size() < 3) {
+		std::cerr << "ERROR: patch_sizes.size() < 3, actual size: " << patch_sizes.size() << endl;
+		return;
+	}
+	
+	std::cout << "patch_sizes values: ";
+	for (size_t i = 0; i < patch_sizes.size(); ++i) {
+		std::cout << patch_sizes[i] << " ";
+	}
+	std::cout << endl;
+	
 	std::vector<float> sigmas(3);
-	for (int i = 0; i < 3; ++i)
-		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // ��W=5��+1�Ƶ�
+	for (int i = 0; i < 3; ++i) {
+		std::cout << "Accessing patch_sizes[" << i << "] = " << patch_sizes[i] << endl;
+		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // 按W=5σ+1推导
+	}
 
 	int64_t depth  = patch_sizes[0];
 	int64_t height = patch_sizes[1]; 
 	int64_t width  = patch_sizes[2];
+	
+	std::cout << "depth=" << depth << ", height=" << height << ", width=" << width << endl;
 
-	// ����ÿ��ά�ȵ�����
+	// ÿάȵ
 	float z_center = (depth - 1)  / 2.0f;
 	float y_center = (height - 1) / 2.0f;
 	float x_center = (width - 1)  / 2.0f;
@@ -484,9 +695,9 @@ void  DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const
 	float y_part = 0.f;
 	float x_part = 0.f;
 	cimg_forXYZ(gaussisan_weight, x, y, z) {
-		z_part = std::exp(-0.5f * std::pow((z - z_center) / z_sigma, 2));
-		y_part = std::exp(-0.5f * std::pow((y - y_center) / y_sigma, 2));
-		x_part = std::exp(-0.5f * std::pow((x - x_center) / x_sigma, 2));
+		z_part = static_cast<float>(std::exp(-0.5f * std::pow((z - z_center) / z_sigma, 2)));
+		y_part = static_cast<float>(std::exp(-0.5f * std::pow((y - y_center) / y_sigma, 2)));
+		x_part = static_cast<float>(std::exp(-0.5f * std::pow((x - x_center) / x_sigma, 2)));
 		gaussisan_weight(x, y, z) = z_part * y_part * x_part;
 	}
 

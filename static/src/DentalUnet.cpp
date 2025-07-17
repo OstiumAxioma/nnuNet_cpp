@@ -6,15 +6,22 @@ DentalUnet::DentalUnet()
 
 	env = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "nnUNetInference");
 	std::vector<std::string> providers = Ort::GetAvailableProviders();
-	use_gpu = true;
+	use_gpu = false;  // 默认使用CPU，如果检测到CUDA则启用GPU
 
+	std::cout << "=== Available Execution Providers ===" << endl;
 	for (const auto& provider : providers) {
-		std::cout << "����Provider: " << provider << std::endl;
+		std::cout << "可用Provider: " << provider << std::endl;
 		if (provider == "CUDAExecutionProvider") {
 			use_gpu = true;
+			std::cout << "=== CUDA Provider detected, GPU will be used ===" << endl;
 		}
 	}
-	//use_gpu = false;
+	
+	if (!use_gpu) {
+		std::cout << "=== No CUDA Provider found, will use CPU ===" << endl;
+	}
+	
+	//use_gpu = false;  // 临时禁用GPU，测试CPU运行
 
 
 	unetConfig.model_file_name = L".\\models\\kneeseg_test.onnx";
@@ -129,17 +136,49 @@ void  DentalUnet::setAlgParameter()
 AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 {
 	if (use_gpu) {
-		//OrtCUDAProviderOptions cuda_options;
-		//cuda_options.device_id = 0;  // ָ�� GPU �豸 ID
-		//session_options.AppendExecutionProvider_CUDA(cuda_options);
-
-		Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
+		std::cout << "=== DEBUG: Setting up GPU options ===" << endl;
+		try {
+			OrtCUDAProviderOptions cuda_options;
+			// RTX 3060 12GB - 设置更合理的内存限制
+			cuda_options.gpu_mem_limit = 8ULL * 1024 * 1024 * 1024;  // 限制为8GB内存，留4GB给系统
+			cuda_options.device_id = 0;
+			cuda_options.arena_extend_strategy = 0;  // 使用默认内存分配策略
+			cuda_options.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchExhaustive;  // 优化卷积算法
+			cuda_options.do_copy_in_default_stream = 1;  // 优化内存拷贝
+			
+			std::cout << "=== DEBUG: GPU Memory Limit set to 8GB for RTX 3060 12GB ===" << endl;
+			std::cout << "=== DEBUG: Attempting to add CUDA provider ===" << endl;
+			session_options.AppendExecutionProvider_CUDA(cuda_options);
+			std::cout << "=== DEBUG: CUDA provider added successfully ===" << endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "=== WARNING: CUDA initialization failed ===" << endl;
+			std::cerr << "Error: " << e.what() << endl;
+			std::cerr << "Falling back to CPU execution..." << endl;
+			use_gpu = false;
+		}
 	}
-	// �����߳���
+	// 线程设置
 	session_options.SetIntraOpNumThreads(1);
 	session_options.SetInterOpNumThreads(1);
+	
+	// 针对RTX 3060的优化设置
+	session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+	session_options.EnableMemPattern();
+	session_options.EnableCpuMemArena();
+	
+	if (use_gpu) {
+		// GPU特定优化
+		session_options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+		std::cout << "=== DEBUG: GPU optimization settings applied ===" << endl;
+	} else {
+		// CPU特定优化
+		session_options.SetExecutionMode(ExecutionMode::ORT_PARALLEL);
+		session_options.SetIntraOpNumThreads(4);  // CPU模式下使用更多线程
+		std::cout << "=== DEBUG: CPU optimization settings applied ===" << endl;
+	}
 
-	// �����Ự
+	// Ự
 	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
@@ -444,50 +483,102 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 
 AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume)
 {
-	if (use_gpu) {
-		OrtCUDAProviderOptions cuda_options;
-		//cuda_options.gpu_mem_limit = 6 * 1024 * 1024 * 1024;  // ����Ϊ6GB�Դ�[6,12](@ref)
-		cuda_options.device_id = 0;
-		session_options.AppendExecutionProvider_CUDA(cuda_options);
-		//Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
-	}
+	std::cout << "=== DEBUG: slidingWindowInfer function start ===" << endl;
+	
+	// GPU设置已经在initializeOnnxruntimeInstances中完成，这里不需要重复设置
+	std::cout << "=== DEBUG: GPU setup already done in initialization ===" << endl;
 
 	std::cout << "env setting is done: " << endl;
 
-	// �����Ự
+	// 创建会话
+	std::cout << "=== DEBUG: Creating ONNX session ===" << endl;
+	
+	// 初始化ONNX Runtime设置
+	std::cout << "=== DEBUG: Initializing ONNX Runtime instances ===" << endl;
+	AI_INT init_status = initializeOnnxruntimeInstances();
+	if (init_status != DentalCbctSegAI_STATUS_SUCCESS) {
+		std::cerr << "Failed to initialize ONNX Runtime instances" << endl;
+		return init_status;
+	}
+	std::cout << "=== DEBUG: ONNX Runtime initialization completed ===" << endl;
+	
 	Ort::AllocatorWithDefaultOptions allocator;
 	//std::unique_ptr<Ort::Session> session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
-	// ��ȡ���������Ϣ
+	// 获取输入输出信息
 	//const char* input_name  = session_ptr->GetInputNameAllocated(0, allocator).get();
 	//const char* output_name = session_ptr->GetOutputNameAllocated(0, allocator).get();
-	// ��ȡ������״
+	// 获取输入形状
 	//auto input_shape = session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
 
-	Ort::Session session(env, config.model_file_name, session_options);
+	std::cout << "=== DEBUG: About to create Ort::Session ===" << endl;
+	std::wcout << L"Model file: " << config.model_file_name << endl;
 	
-	const char* input_name  = session.GetInputNameAllocated(0, allocator).get();
-	const char* output_name = session.GetOutputNameAllocated(0, allocator).get();
+	// 声明变量
+	Ort::Session* session_ptr = nullptr;
+	const char* input_name = nullptr;
+	const char* output_name = nullptr;
+	std::vector<int64_t> input_tensor_shape;
+	std::vector<int64_t> input_shape;
+	
+	try {
+		session_ptr = new Ort::Session(env, config.model_file_name, session_options);
+		std::cout << "=== DEBUG: Session created successfully ===" << endl;
+		
+		input_name = session_ptr->GetInputNameAllocated(0, allocator).get();
+		output_name = session_ptr->GetOutputNameAllocated(0, allocator).get();
 
-	std::cout << "Session loading is done: " << endl;
-	std::cout << "input_name: " << input_name << endl;
-	std::cout << "output_name: " << output_name << endl;
-	auto input_shape = session.GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+		std::cout << "Session loading is done: " << endl;
+		std::cout << "input_name: " << input_name << endl;
+		std::cout << "output_name: " << output_name << endl;
+		
+		std::cout << "=== DEBUG: Getting input shape ===" << endl;
+		input_shape = session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+		std::cout << "=== DEBUG: Input shape obtained ===" << endl;
 
-	if (input_shape.size() != 5) {
-		throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
+		if (input_shape.size() != 5) {
+			std::cerr << "ERROR: Expected 5D input, got " << input_shape.size() << "D" << endl;
+			throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
+		}
+
+		// 验证图像大小
+		if (config.patch_size.size() != 3) {
+			std::cerr << "ERROR: Patch size should be 3D, got " << config.patch_size.size() << "D" << endl;
+			throw std::runtime_error("Patch size should be 3D (depth, height, width)");
+		}
+
+		std::cout << "=== DEBUG: About to create input_tensor_shape ===" << endl;
+		// 准备输入张量形状 (1, 1, D, H, W)
+		input_tensor_shape = { 1, 1, config.patch_size[2], config.patch_size[1], config.patch_size[0] };
+		std::cout << "=== DEBUG: input_tensor_shape created successfully ===" << endl;
+		
+	}
+	catch (const Ort::Exception& e) {
+		std::cerr << "=== ONNX Session Creation Exception ===" << endl;
+		std::cerr << "Error code: " << e.GetOrtErrorCode() << endl;
+		std::cerr << "Error message: " << e.what() << endl;
+		if (session_ptr) delete session_ptr;
+		return DentalCbctSegAI_STATUS_FAIED;
+	}
+	catch (const std::exception& e) {
+		std::cerr << "=== Session Creation Standard Exception ===" << endl;
+		std::cerr << "Error message: " << e.what() << endl;
+		if (session_ptr) delete session_ptr;
+		return DentalCbctSegAI_STATUS_FAIED;
+	}
+	catch (...) {
+		std::cerr << "=== Unknown Session Creation Exception ===" << endl;
+		if (session_ptr) delete session_ptr;
+		return DentalCbctSegAI_STATUS_FAIED;
 	}
 
-	// ��֤ͼ����С
-	if (config.patch_size.size() != 3) {
-		throw std::runtime_error("Patch size should be 3D (depth, height, width)");
-	}
-
-	// ׼������������״ (1, 1, D, H, W)
-	std::vector<int64_t> input_tensor_shape = { 1, 1, config.patch_size[2], config.patch_size[1], config.patch_size[0] };
+	// 如果到这里说明会话创建成功
+	Ort::Session& session = *session_ptr;
 
 	int depth = normalized_volume.depth();
 	int width = normalized_volume.width();
 	int height = normalized_volume.height();
+
+	std::cout << "=== DEBUG: Volume dimensions: " << width << "x" << height << "x" << depth << endl;
 
 	// x Image width, y Image height, z Image depth
 	float step_size_ratio = config.step_size_ratio;
@@ -527,7 +618,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	if (NETDEBUG_FLAG)
 		std::cout << "Number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
 
-	// ��ʼ���������
+	// 初始化预测概率图
 	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
 	CImg<float> count_vol = CImg<float>(width, height, depth, 1, 0.f);
 	//std::cout << "predSegProbVolume shape: " << depth << width << height << endl;
@@ -540,7 +631,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	size_t input_patch_voxel_numel = config.patch_size[0] * config.patch_size[1] * config.patch_size[2];
 	size_t output_patch_vol_sz = config.num_classes * config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float);
 
-	//����������
+	//遍历所有切片
 	int patch_count = 0;
 	for (int sz = 0; sz < Z_num_steps; sz++)
 	{
@@ -574,7 +665,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 				float* input_data_ptr = input_patch.data();
 
-				// ������������
+				// 准备输入张量
 				Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(
 					OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
@@ -584,39 +675,72 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					input_tensor_shape.data(),
 					input_tensor_shape.size());
 
-				// ��������
+				// 运行ONNX会话
 				std::cout << "Run onnx session." << endl;
+				std::cout << "=== DEBUG: About to run ONNX session ===" << endl;
+				std::cout << "input_name: " << input_name << endl;
+				std::cout << "output_name: " << output_name << endl;
+				std::cout << "input_tensor_shape: ";
+				for (size_t i = 0; i < input_tensor_shape.size(); ++i) {
+					std::cout << input_tensor_shape[i] << " ";
+				}
+				std::cout << endl;
+				std::cout << "input_patch_voxel_numel: " << input_patch_voxel_numel << endl;
 
 				//session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
 
 				//auto output_tensors = session_ptr->Run(
-				auto output_tensors = session.Run(
-					Ort::RunOptions{ nullptr },
-					&input_name,
-					&input_tensor,
-					1,
-					&output_name,
-					1
-				);
+				try {
+					std::cout << "=== DEBUG: Calling session.Run() ===" << endl;
+					auto output_tensors = session.Run(
+						Ort::RunOptions{ nullptr },
+						&input_name,
+						&input_tensor,
+						1,
+						&output_name,
+						1
+					);
+					std::cout << "=== DEBUG: session.Run() completed successfully ===" << endl;
+					
+					if (config.use_mirroring && use_gpu)
+					{
+						input_patch = input_patch.mirror('x');
+					}
 
-				if (config.use_mirroring && use_gpu)
-				{
-					input_patch = input_patch.mirror('x');
+					std::cout << "onnx session running is done." << endl;
+
+					// 获取输出
+					std::cout << "=== DEBUG: Getting output data ===" << endl;
+					float* output_data = output_tensors[0].GetTensorMutableData<float>();
+					std::cout << "=== DEBUG: Output data obtained ===" << endl;
+
+					// 转换为CImg
+					std::cout << "=== DEBUG: Copying output data to CImg ===" << endl;
+					std::memcpy(win_pob.data(), output_data, output_patch_vol_sz);
+					std::cout << "=== DEBUG: Data copied successfully ===" << endl;
+					
+					output_tensors.clear();
+					//input_tensor.release();
+
+					std::cout << "output_patch min: " << (win_pob.min)() << endl;
+					std::cout << "output_patch max: " << (win_pob.max)() << endl;
+					std::cout << "output_patch mean: " << win_pob.mean() << endl;
 				}
-
-				std::cout << "onnx session running is done." << endl;
-
-				// ��ȡ���
-				float* output_data = output_tensors[0].GetTensorMutableData<float>();
-
-				// ת��ΪCImg
-				std::memcpy(win_pob.data(), output_data, output_patch_vol_sz);
-				output_tensors.clear();
-				//input_tensor.release();
-
-				std::cout << "output_patch min: " << (win_pob.min)() << endl;
-				std::cout << "output_patch max: " << (win_pob.max)() << endl;
-				std::cout << "output_patch mean: " << win_pob.mean() << endl;
+				catch (const Ort::Exception& e) {
+					std::cerr << "=== ONNX Runtime Exception ===" << endl;
+					std::cerr << "Error code: " << e.GetOrtErrorCode() << endl;
+					std::cerr << "Error message: " << e.what() << endl;
+					return DentalCbctSegAI_STATUS_FAIED;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "=== Standard Exception ===" << endl;
+					std::cerr << "Error message: " << e.what() << endl;
+					return DentalCbctSegAI_STATUS_FAIED;
+				}
+				catch (...) {
+					std::cerr << "=== Unknown Exception ===" << endl;
+					return DentalCbctSegAI_STATUS_FAIED;
+				}
 
 				cimg_forXYZC(win_pob, x, y, z, c) {
 					predicted_output_prob(lb_x + x, lb_y + y, lb_z + z, c) += (win_pob(x, y, z, c) * gaussisan_weight(x, y, z));
@@ -628,11 +752,17 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		}
 	}
 
-	// ��һ�����
+	// 平均化
 	cimg_forXYZC(predicted_output_prob, x, y, z, c) {
 		predicted_output_prob(x, y, z, c) /= count_vol(x, y, z);
 	}
 	std::cout << "Sliding window inference is done." << endl;
+
+	// 清理内存
+	if (session_ptr) {
+		delete session_ptr;
+		session_ptr = nullptr;
+	}
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
@@ -640,12 +770,12 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 void  DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 {
-	//HUֵ�ض�
+	//HU值归一化
 	float min_hu4dentalCTNormalization = config.min_max_HU[0];
 	float max_hu4dentalCTNormalization = config.min_max_HU[1];
 	input_volume.cut(min_hu4dentalCTNormalization, max_hu4dentalCTNormalization);
 
-	//����z-score
+	//进行z-score
 	float mean_hu4dentalCTNormalization = config.mean_std_HU[0];
 	float std_hu4dentalCTNormalization = config.mean_std_HU[1];
 	input_volume -= mean_hu4dentalCTNormalization;
@@ -681,12 +811,12 @@ void  DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const
 	
 	std::cout << "depth=" << depth << ", height=" << height << ", width=" << width << endl;
 
-	// ÿάȵ
+	// 每层
 	float z_center = (depth - 1)  / 2.0f;
 	float y_center = (height - 1) / 2.0f;
 	float x_center = (width - 1)  / 2.0f;
 
-	// �����׼���������������
+	// 中心化（中心点为原点）
 	float z_sigma = depth  / 4.0f;
 	float y_sigma = height / 4.0f;
 	float x_sigma = width  / 4.0f;
@@ -710,15 +840,15 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 		throw std::invalid_argument("Input must be a non-empty 4D CImg with spectrum dimension.");
 	}
 
-	// ��ʼ�����ͼ����ά�ռ䣬��spectrumά��
+	// 初始化结果图像，维度为(W, H, D, 1)
 	CImg<short> result(input.width(), input.height(), input.depth(), 1, 0);
 
-	// ����ÿ���ռ�λ�� (x,y,z)
+	// 遍历每个体素位置 (x,y,z)
 	cimg_forXYZ(input, x, y, z) {
 		short max_idx = 0;
 		float max_val = input(x, y, z, 0);
 
-		// ����spectrumά��
+		// 遍历spectrum维度
 		for (short s = 1; s < input.spectrum(); ++s) {
 			const float current_val = input(x, y, z, s);
 			if (current_val > max_val) {
@@ -726,7 +856,7 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 				max_idx = s;
 			}
 		}
-		result(x, y, z) = max_idx; // �洢�������
+		result(x, y, z) = max_idx; // 存储最大值的类别
 	}
 	return result;
 }

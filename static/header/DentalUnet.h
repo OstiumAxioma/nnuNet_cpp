@@ -11,7 +11,7 @@
 #include <onnxruntime_cxx_api.h>
 
 #define cimg_display_type 2
-#include "./utility/CImg/CImg.h"
+#include "../../lib/CImg/CImg.h"
 
 #include "DentalCbctSegAI_API.h"
 
@@ -63,11 +63,11 @@ public:
 
 	void    setStepSizeRatio(float ratio);
 
-	AI_INT  performInference(AI_DataInfo *srcData); //Ö´ÐÐ·Ö¸îÁ÷³Ì
+	AI_INT  performInference(AI_DataInfo *srcData); //Ö´ï¿½Ð·Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½
 
-	AI_INT  getSegMask(AI_DataInfo *dstData); //»ñÈ¡·Ö¸î½á¹û
+	AI_INT  getSegMask(AI_DataInfo *dstData); //ï¿½ï¿½È¡ï¿½Ö¸ï¿½ï¿½ï¿½
 
-	void    setDnnOptions(); //²ÎÊýÉèÖÃ£¬ÊÇ·ñcuda¡¢opengl£¬À©Õ¹ÓÃ
+	void    setDnnOptions(); //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½ï¿½Ç·ï¿½cudaï¿½ï¿½openglï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½
 	void    setAlgParameter();
 
 private:
@@ -75,7 +75,7 @@ private:
 	bool   use_gpu;
 	Ort::Env env;
 
-	//ÊäÈë£ºÊäÈëCBCTÌåÊý¾Ý
+	//ï¿½ï¿½ï¿½ë£ºï¿½ï¿½ï¿½ï¿½CBCTï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	CImg<short> input_cbct_volume;
 
 	float intensity_mean;
@@ -88,7 +88,7 @@ private:
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
 
-	//Êä³ö£º·Ö¸î½á¹û£¬ÈýÎ¬Mask
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬Mask
 	CImg<float> predicted_output_prob;
 	CImg<short> output_seg_mask;
 
@@ -98,19 +98,19 @@ private:
 	//std::unique_ptr<Ort::Session> semantic_seg_session_ptr;
 	//std::unique_ptr<Ort::Session> ian_seg_session_ptr;
 
-	//Ä£ÐÍÄÚÖÃ²ÎÊý
+	//Ä£ï¿½ï¿½ï¿½ï¿½ï¿½Ã²ï¿½ï¿½ï¿½
 	nnUNetConfig unetConfig;
 
-	//ÊäÈëCBCTÌåÊý¾Ý
+	//ï¿½ï¿½ï¿½ï¿½CBCTï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	AI_INT  setInput(AI_DataInfo *srcData); 
 
 	AI_INT  initializeOnnxruntimeInstances();
 
-	//uunet·Ö¸îÄ£ÐÍ»¬¶¯´°ÍÆÀí·Ö¸î
+	//uunetï¿½Ö¸ï¿½Ä£ï¿½Í»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½
 	AI_INT  segModelInfer(nnUNetConfig config, CImg<short> input_volume);
 	AI_INT  slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume);
 
-	AI_INT   postProcessing();// ¶Ô·Ö¸î½á¹û½øÐÐºó´¦Àí
+	AI_INT   postProcessing();// ï¿½Ô·Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ðºï¿½ï¿½ï¿½
 
 	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
 	void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);

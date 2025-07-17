@@ -1,5 +1,5 @@
-#include "DentalCbctSegAI_API.h"
-#include "DentalUnet.h"
+#include "../header/DentalCbctSegAI_API.h"
+#include "../header/DentalUnet.h"
 
 
 DentalCbctSegAI_API AI_HANDLE    DentalCbctSegAI_CreateObj()

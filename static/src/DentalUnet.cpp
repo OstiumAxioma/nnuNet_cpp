@@ -1,4 +1,4 @@
-#include "DentalUnet.h"
+#include "../header/DentalUnet.h"
 
 DentalUnet::DentalUnet()
 {
@@ -9,7 +9,7 @@ DentalUnet::DentalUnet()
 	use_gpu = true;
 
 	for (const auto& provider : providers) {
-		std::cout << "¿ÉÓÃProvider: " << provider << std::endl;
+		std::cout << "ï¿½ï¿½ï¿½ï¿½Provider: " << provider << std::endl;
 		if (provider == "CUDAExecutionProvider") {
 			use_gpu = true;
 		}
@@ -75,13 +75,13 @@ void  DentalUnet::setStepSizeRatio(float ratio)
 
 void  DentalUnet::setDnnOptions()
 {
-	//±£Áô£¬À©Õ¹Ó²¼þ¼ÓËÙÉèÖÃÓÃ
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹Ó²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 }
 
 
 void  DentalUnet::setAlgParameter()
 {
-	//±£Áô£¬ÉèÖÃËã·¨²ÎÊý
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ã·¨ï¿½ï¿½ï¿½ï¿½
 }
 
 
@@ -89,16 +89,16 @@ AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 {
 	if (use_gpu) {
 		//OrtCUDAProviderOptions cuda_options;
-		//cuda_options.device_id = 0;  // Ö¸¶¨ GPU Éè±¸ ID
+		//cuda_options.device_id = 0;  // Ö¸ï¿½ï¿½ GPU ï¿½è±¸ ID
 		//session_options.AppendExecutionProvider_CUDA(cuda_options);
 
 		Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
 	}
-	// ÉèÖÃÏß³ÌÊý
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ß³ï¿½ï¿½ï¿½
 	session_options.SetIntraOpNumThreads(1);
 	session_options.SetInterOpNumThreads(1);
 
-	// ´´½¨»á»°
+	// ï¿½ï¿½ï¿½ï¿½ï¿½á»°
 	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
@@ -111,32 +111,32 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	Width0 = srcData->Width;
 	Height0 = srcData->Height;
 	Depth0 = srcData->Depth;
-	float voxelSpacing = srcData->VoxelSpacing; //µ¥Î»: mm
-	float voxelSpacingX = srcData->VoxelSpacingX; //µ¥Î»: mm
-	float voxelSpacingY = srcData->VoxelSpacingY; //µ¥Î»: mm
-	float voxelSpacingZ = srcData->VoxelSpacingZ; //µ¥Î»: mm
+	float voxelSpacing = srcData->VoxelSpacing; //ï¿½ï¿½Î»: mm
+	float voxelSpacingX = srcData->VoxelSpacingX; //ï¿½ï¿½Î»: mm
+	float voxelSpacingY = srcData->VoxelSpacingY; //ï¿½ï¿½Î»: mm
+	float voxelSpacingZ = srcData->VoxelSpacingZ; //ï¿½ï¿½Î»: mm
 
 	float fovX = float(Width0) * voxelSpacingY;
 	float fovY = float(Height0) * voxelSpacingX;
 	float fovZ = float(Depth0) * voxelSpacingZ;
 
 	if (Height0 < 64 || Width0 < 64 || Depth0 < 64)
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //ÊäÈëÌåÊý¾Ý¹ýÐ¡
+		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¹ï¿½Ð¡
 
 	if (Height0 > 4096 || Width0 > 4096 || Depth0 > 2048)
-		return DentalCbctSegAI_STATUS_VOLUME_LARGE; //ÊäÈëÌåÊý¾Ý¹ý´ó
+		return DentalCbctSegAI_STATUS_VOLUME_LARGE; //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¹ï¿½ï¿½ï¿½
 
-	if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volume¹ýÐ¡
+	if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volumeï¿½ï¿½Ð¡
 		return DentalCbctSegAI_STATUS_VOLUME_SMALL;
 
-	if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacing¹ýÐ¡
+	if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacingï¿½ï¿½Ð¡
 		return DentalCbctSegAI_STATUS_VOLUME_LARGE;
 
 	if (voxelSpacing > 1.1f || voxelSpacingX > 1.1f || voxelSpacingY > 1.1f || voxelSpacingZ > 1.1f)
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //voxelSpacing¶à´ó
+		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //voxelSpacingï¿½ï¿½ï¿½
 
-	// ¿½±´ÊäÈëÊý¾Ýµ½CImg¶ÔÏó
-	//RAI: ÑÀ³ÝÔÚÇ°£¬ºóÄÔÉ×ÔÚºó£»¶ú¶äÔÚ×óÓÒ£»ÏÂ°ÍÔÚÉÏ£¬Í·¶¥ÔÚÏÂ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ýµï¿½CImgï¿½ï¿½ï¿½ï¿½
+	//RAI: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úºó£»¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò£ï¿½ï¿½Â°ï¿½ï¿½ï¿½ï¿½Ï£ï¿½Í·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	input_cbct_volume = CImg<short>(Width0, Height0, Depth0, 1, 0);
 	long volSize = Width0 * Height0 * Depth0 * sizeof(short);
 	std::memcpy(input_cbct_volume.data(), srcData->ptr_Data, volSize);
@@ -187,13 +187,13 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		throw std::runtime_error("Spacing dimensions mismatch");
 	}
 
-	// ¼ÆËãÄ¿±ê³ß´ç
+	// ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ß´ï¿½
 	bool is_volume_scaled = false;
 	////input_voxel_spacing = {voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth 
 	std::vector<int64_t> input_size = { input_volume.width(), input_volume.height(), input_volume.depth()};
 	std::vector<int64_t> output_size;
 	float scaled_factor = 1.f;
-	for (int i = 0; i < 3; ++i) {  // Ö»´¦Àí¿Õ¼äÎ¬¶È
+	for (int i = 0; i < 3; ++i) {  // Ö»ï¿½ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½Î¬ï¿½ï¿½
 		scaled_factor = transposed_input_voxel_spacing[i] / config.voxel_spacing[i];
 		int scaled_sz = std::round(input_size[i] * scaled_factor);
 		if (scaled_factor < 0.9f || scaled_factor > 1.1f || scaled_sz < config.patch_size[i])
@@ -215,7 +215,7 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "scaled_input_volume mean: " << scaled_input_volume.mean() << endl;
 	std::cout << "scaled_input_volume variance: " << scaled_input_volume.variance() << endl;
 
-	//¹éÒ»»¯´¦Àí
+	//ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	std::map<std::string, int> normalizationOptionsMap = {
 		{"CTNormalization",     10},
 		{"CT",                  10},
@@ -249,11 +249,11 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "normalized_input_volume mean: " << scaled_input_volume.mean() << endl;
 	std::cout << "normalized_input_volume variance: " << scaled_input_volume.variance() << endl;
 
-	//»¬¶¯´°ÍÆÀíÔ¤²â
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½
 	AI_INT is_ok = slidingWindowInfer(config, scaled_input_volume);
 	std::cout << "slidingWindowInfer: " << is_ok << endl;
 
-	//Ê¹ÓÃ3D²åÖµ½øÐÐËõ·Å
+	//Ê¹ï¿½ï¿½3Dï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	if (is_volume_scaled)
 		predicted_output_prob.resize(input_size[0], input_size[1], input_size[2], config.num_classes, 3);
 
@@ -267,7 +267,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 {
 	if (use_gpu) {
 		OrtCUDAProviderOptions cuda_options;
-		//cuda_options.gpu_mem_limit = 6 * 1024 * 1024 * 1024;  // ÏÞÖÆÎª6GBÏÔ´æ[6,12](@ref)
+		//cuda_options.gpu_mem_limit = 6 * 1024 * 1024 * 1024;  // ï¿½ï¿½ï¿½ï¿½Îª6GBï¿½Ô´ï¿½[6,12](@ref)
 		cuda_options.device_id = 0;
 		session_options.AppendExecutionProvider_CUDA(cuda_options);
 		//Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
@@ -275,13 +275,13 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 	std::cout << "env setting is done: " << endl;
 
-	// ´´½¨»á»°
+	// ï¿½ï¿½ï¿½ï¿½ï¿½á»°
 	Ort::AllocatorWithDefaultOptions allocator;
 	//std::unique_ptr<Ort::Session> session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
-	// »ñÈ¡ÊäÈëÊä³öÐÅÏ¢
+	// ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 	//const char* input_name  = session_ptr->GetInputNameAllocated(0, allocator).get();
 	//const char* output_name = session_ptr->GetOutputNameAllocated(0, allocator).get();
-	// »ñÈ¡ÊäÈëÐÎ×´
+	// ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´
 	//auto input_shape = session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
 
 	Ort::Session session(env, config.model_file_name, session_options);
@@ -298,12 +298,12 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
 	}
 
-	// ÑéÖ¤Í¼Ïó¿é´óÐ¡
+	// ï¿½ï¿½Ö¤Í¼ï¿½ï¿½ï¿½ï¿½Ð¡
 	if (config.patch_size.size() != 3) {
 		throw std::runtime_error("Patch size should be 3D (depth, height, width)");
 	}
 
-	// ×¼±¸ÊäÈëÕÅÁ¿ÐÎ×´ (1, 1, D, H, W)
+	// ×¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´ (1, 1, D, H, W)
 	std::vector<int64_t> input_tensor_shape = { 1, 1, config.patch_size[2], config.patch_size[1], config.patch_size[0] };
 
 	int depth = normalized_volume.depth();
@@ -334,7 +334,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	if (NETDEBUG_FLAG)
 		std::cout << "Number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
 
-	// ³õÊ¼»¯Êä³öÕÅÁ¿
+	// ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
 	CImg<float> count_vol = CImg<float>(width, height, depth, 1, 0.f);
 	//std::cout << "predSegProbVolume shape: " << depth << width << height << endl;
@@ -347,7 +347,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	size_t input_patch_voxel_numel = config.patch_size[0] * config.patch_size[1] * config.patch_size[2];
 	size_t output_patch_vol_sz = config.num_classes * config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float);
 
-	//»¬¶¯´°ÍÆÀí
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int patch_count = 0;
 	for (int sz = 0; sz < Z_num_steps; sz++)
 	{
@@ -381,7 +381,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 				float* input_data_ptr = input_patch.data();
 
-				// ´´½¨ÊäÈëÕÅÁ¿
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(
 					OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
@@ -391,7 +391,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					input_tensor_shape.data(),
 					input_tensor_shape.size());
 
-				// ÔËÐÐÍÆÀí
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				std::cout << "Run onnx session." << endl;
 
 				//session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
@@ -413,10 +413,10 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 				std::cout << "onnx session running is done." << endl;
 
-				// »ñÈ¡Êä³ö
+				// ï¿½ï¿½È¡ï¿½ï¿½ï¿½
 				float* output_data = output_tensors[0].GetTensorMutableData<float>();
 
-				// ×ª»»ÎªCImg
+				// ×ªï¿½ï¿½ÎªCImg
 				std::memcpy(win_pob.data(), output_data, output_patch_vol_sz);
 				output_tensors.clear();
 				//input_tensor.release();
@@ -435,7 +435,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		}
 	}
 
-	// ¹éÒ»»¯Êä³ö
+	// ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½
 	cimg_forXYZC(predicted_output_prob, x, y, z, c) {
 		predicted_output_prob(x, y, z, c) /= count_vol(x, y, z);
 	}
@@ -447,12 +447,12 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 void  DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 {
-	//HUÖµ½Ø¶Ï
+	//HUÖµï¿½Ø¶ï¿½
 	float min_hu4dentalCTNormalization = config.min_max_HU[0];
 	float max_hu4dentalCTNormalization = config.min_max_HU[1];
 	input_volume.cut(min_hu4dentalCTNormalization, max_hu4dentalCTNormalization);
 
-	//¼ÆËãz-score
+	//ï¿½ï¿½ï¿½ï¿½z-score
 	float mean_hu4dentalCTNormalization = config.mean_std_HU[0];
 	float std_hu4dentalCTNormalization = config.mean_std_HU[1];
 	input_volume -= mean_hu4dentalCTNormalization;
@@ -464,18 +464,18 @@ void  DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const
 {
 	std::vector<float> sigmas(3);
 	for (int i = 0; i < 3; ++i)
-		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // °´W=5¦Ò+1ÍÆµ¼
+		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // ï¿½ï¿½W=5ï¿½ï¿½+1ï¿½Æµï¿½
 
 	int64_t depth  = patch_sizes[0];
 	int64_t height = patch_sizes[1]; 
 	int64_t width  = patch_sizes[2];
 
-	// ¼ÆËãÃ¿¸öÎ¬¶ÈµÄÖÐÐÄ
+	// ï¿½ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½Î¬ï¿½Èµï¿½ï¿½ï¿½ï¿½ï¿½
 	float z_center = (depth - 1)  / 2.0f;
 	float y_center = (height - 1) / 2.0f;
 	float x_center = (width - 1)  / 2.0f;
 
-	// ¼ÆËã±ê×¼²î£¨¸²¸ÇÕû¸ö²¹¶¡£©
+	// ï¿½ï¿½ï¿½ï¿½ï¿½×¼ï¿½î£¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	float z_sigma = depth  / 4.0f;
 	float y_sigma = height / 4.0f;
 	float x_sigma = width  / 4.0f;
@@ -499,15 +499,15 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 		throw std::invalid_argument("Input must be a non-empty 4D CImg with spectrum dimension.");
 	}
 
-	// ³õÊ¼»¯½á¹ûÍ¼Ïñ£ºÈýÎ¬¿Õ¼ä£¬ÎÞspectrumÎ¬¶È
+	// ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Í¼ï¿½ï¿½ï¿½ï¿½Î¬ï¿½Õ¼ä£¬ï¿½ï¿½spectrumÎ¬ï¿½ï¿½
 	CImg<short> result(input.width(), input.height(), input.depth(), 1, 0);
 
-	// ±éÀúÃ¿¸ö¿Õ¼äÎ»ÖÃ (x,y,z)
+	// ï¿½ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½Õ¼ï¿½Î»ï¿½ï¿½ (x,y,z)
 	cimg_forXYZ(input, x, y, z) {
 		short max_idx = 0;
 		float max_val = input(x, y, z, 0);
 
-		// ±éÀúspectrumÎ¬¶È
+		// ï¿½ï¿½ï¿½ï¿½spectrumÎ¬ï¿½ï¿½
 		for (short s = 1; s < input.spectrum(); ++s) {
 			const float current_val = input(x, y, z, s);
 			if (current_val > max_val) {
@@ -515,7 +515,7 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 				max_idx = s;
 			}
 		}
-		result(x, y, z) = max_idx; // ´æ´¢×î´óË÷Òý
+		result(x, y, z) = max_idx; // ï¿½æ´¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	}
 	return result;
 }

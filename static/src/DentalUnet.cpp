@@ -4,35 +4,54 @@ DentalUnet::DentalUnet()
 {
 	NETDEBUG_FLAG = true;
 
-	env = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "nnUNetInference");
-	std::vector<std::string> providers = Ort::GetAvailableProviders();
-	use_gpu = false;  // 默认使用CPU，如果检测到CUDA则启用GPU
+	// 设置DLL搜索路径以包含系统CUDA目录
+	char* cudaPathEnv = nullptr;
+	size_t len = 0;
+	if (_dupenv_s(&cudaPathEnv, &len, "CUDA_PATH") == 0 && cudaPathEnv != nullptr) {
+		std::string cudaBinPath = std::string(cudaPathEnv) + "\\bin";
+		std::wstring wcudaBinPath(cudaBinPath.begin(), cudaBinPath.end());
+		
+		// 添加CUDA bin目录到DLL搜索路径
+		SetDllDirectoryW(wcudaBinPath.c_str());
+		AddDllDirectory(wcudaBinPath.c_str());
+		
+		std::cout << "Added CUDA bin to DLL search path: " << cudaBinPath << endl;
+		free(cudaPathEnv);
+	}
+	
+	// 诊断CUDA库加载情况
+	diagnoseCUDALibraries();
 
+	env = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "nnUNetInference");
+	
+	// 默认启用GPU
+	use_gpu = true;
+	
+	// 检查可用的执行提供者
+	std::vector<std::string> providers = Ort::GetAvailableProviders();
 	std::cout << "=== Available Execution Providers ===" << endl;
+	
+	bool cuda_available = false;
 	for (const auto& provider : providers) {
 		std::cout << "可用Provider: " << provider << std::endl;
 		if (provider == "CUDAExecutionProvider") {
-			use_gpu = true;
-			std::cout << "=== CUDA Provider detected, GPU will be used ===" << endl;
+			cuda_available = true;
+			std::cout << "=== CUDA Provider detected ===" << endl;
 		}
 	}
 	
-	if (!use_gpu) {
-		std::cout << "=== No CUDA Provider found, will use CPU ===" << endl;
+	if (!cuda_available) {
+		std::cerr << "=== ERROR: CUDA Provider not available! ===" << endl;
+		throw std::runtime_error("CUDA Provider not available - GPU is required for this application");
 	}
 	
-	//use_gpu = false;  // 临时禁用GPU，测试CPU运行
-
-
-	unetConfig.model_file_name = L".\\models\\kneeseg_test.onnx";
+	// 先初始化配置参数
+	unetConfig.model_file_name = nullptr;
 	unetConfig.input_channels = 1;
 	unetConfig.num_classes = 3;
 	unetConfig.mandible_label = 1;
 	unetConfig.maxilla_label = 2;
 	unetConfig.sinus_label = 3;
-	//unetConfig.ian_label = 4;
-	//unetConfig.uppertooth_label = 5;
-	//unetConfig.lowertooth_label = 6;
 	unetConfig.cimg_transpose_forward  = "xyz";
 	unetConfig.cimg_transpose_backward = "xyz";
 	unetConfig.transpose_forward  = { 0, 1, 2 };
@@ -45,35 +64,96 @@ DentalUnet::DentalUnet()
 	unetConfig.mean_std_HU = { 274.2257080078125f, 366.05450439453125f };
 	unetConfig.use_mirroring = false;
 	
+	// 初始化GPU配置，但不创建会话（因为模型路径还未设置）
+	if (!initializeGPU()) {
+		std::cerr << "=== ERROR: GPU initialization failed! ===" << endl;
+		throw std::runtime_error("GPU initialization failed - GPU is required for this application");
+	}
+	
+	std::cout << "=== GPU initialized successfully ===" << endl;
+	
 	// 添加调试信息：验证构造函数中vector初始化
 	std::cout << "=== DEBUG: DentalUnet constructor end ===" << endl;
+	std::cout << "GPU Status: " << (use_gpu ? "ENABLED" : "DISABLED") << endl;
 	std::cout << "unetConfig.transpose_forward.size(): " << unetConfig.transpose_forward.size() << endl;
 	std::cout << "unetConfig.transpose_backward.size(): " << unetConfig.transpose_backward.size() << endl;
 	std::cout << "unetConfig.voxel_spacing.size(): " << unetConfig.voxel_spacing.size() << endl;
 	std::cout << "unetConfig.patch_size.size(): " << unetConfig.patch_size.size() << endl;
-	
-	std::cout << "unetConfig.transpose_forward values: ";
-	for (size_t i = 0; i < unetConfig.transpose_forward.size(); ++i) {
-		std::cout << unetConfig.transpose_forward[i] << " ";
-	}
-	std::cout << endl;
-	
-	std::cout << "unetConfig.voxel_spacing values: ";
-	for (size_t i = 0; i < unetConfig.voxel_spacing.size(); ++i) {
-		std::cout << unetConfig.voxel_spacing[i] << " ";
-	}
-	std::cout << endl;
-	
-	std::cout << "unetConfig.patch_size values: ";
-	for (size_t i = 0; i < unetConfig.patch_size.size(); ++i) {
-		std::cout << unetConfig.patch_size[i] << " ";
-	}
-	std::cout << endl;
 }
 
 
 DentalUnet::~DentalUnet()
 {
+}
+
+void DentalUnet::diagnoseCUDALibraries() 
+{
+	std::cout << "=== CUDA Library Diagnostic ===" << endl;
+	
+	// 检查关键CUDA 12.x库
+	std::vector<std::string> cuda_dlls = {
+		"cublas64_12.dll",
+		"cublasLt64_12.dll", 
+		"cudnn64_9.dll",
+		"cudnn_ops_infer64_9.dll",
+		"cudnn_cnn_infer64_9.dll",
+		"cudnn_adv_infer64_9.dll",
+		"cudart64_12.dll"
+	};
+	
+	// 检查ONNX Runtime Provider库
+	std::vector<std::string> ort_dlls = {
+		"onnxruntime_providers_cuda.dll",
+		"onnxruntime_providers_shared.dll",
+		"onnxruntime.dll"
+	};
+	
+	bool allCudaLoaded = true;
+	bool allOrtLoaded = true;
+	
+	std::cout << "\n=== Checking CUDA 12.x/cuDNN 9.x DLLs ===" << endl;
+	for (const auto& dll : cuda_dlls) {
+		HMODULE handle = LoadLibraryA(dll.c_str());
+		if (handle) {
+			std::cout << "[OK] " << dll << " - Loaded successfully" << endl;
+			FreeLibrary(handle);
+		} else {
+			DWORD error = GetLastError();
+			std::cout << "[FAIL] " << dll << " - Failed to load (Error: " << error << ")" << endl;
+			allCudaLoaded = false;
+		}
+	}
+	
+	std::cout << "\n=== Checking ONNX Runtime Provider DLLs ===" << endl;
+	for (const auto& dll : ort_dlls) {
+		HMODULE handle = LoadLibraryA(dll.c_str());
+		if (handle) {
+			std::cout << "[OK] " << dll << " - Loaded successfully" << endl;
+			FreeLibrary(handle);
+		} else {
+			DWORD error = GetLastError();
+			std::cout << "[FAIL] " << dll << " - Failed to load (Error: " << error << ")" << endl;
+			allOrtLoaded = false;
+		}
+	}
+	
+	std::cout << "\n=== Diagnostic Summary ===" << endl;
+	if (!allCudaLoaded) {
+		std::cerr << "ERROR: Missing CUDA 12.x or cuDNN 9.x libraries!" << endl;
+		std::cerr << "Please ensure CUDA 12.x and cuDNN 9.x are installed." << endl;
+		std::cerr << "CUDA/cuDNN path should be: C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.x\\bin" << endl;
+	}
+	if (!allOrtLoaded) {
+		std::cerr << "ERROR: Missing ONNX Runtime GPU libraries!" << endl;
+		std::cerr << "Please ensure ONNX Runtime GPU package for CUDA 12.x is properly installed." << endl;
+	}
+	
+	if (!allCudaLoaded || !allOrtLoaded) {
+		throw std::runtime_error("Required CUDA 12.x/cuDNN 9.x libraries not found");
+	}
+	
+	std::cout << "All required libraries found successfully!" << endl;
+	std::cout << "===================================\n" << endl;
 }
 
 
@@ -135,52 +215,15 @@ void  DentalUnet::setAlgParameter()
 
 AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 {
-	if (use_gpu) {
-		std::cout << "=== DEBUG: Setting up GPU options ===" << endl;
-		try {
-			OrtCUDAProviderOptions cuda_options;
-			// RTX 3060 12GB - 设置更合理的内存限制
-			cuda_options.gpu_mem_limit = 8ULL * 1024 * 1024 * 1024;  // 限制为8GB内存，留4GB给系统
-			cuda_options.device_id = 0;
-			cuda_options.arena_extend_strategy = 0;  // 使用默认内存分配策略
-			cuda_options.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchExhaustive;  // 优化卷积算法
-			cuda_options.do_copy_in_default_stream = 1;  // 优化内存拷贝
-			
-			std::cout << "=== DEBUG: GPU Memory Limit set to 8GB for RTX 3060 12GB ===" << endl;
-			std::cout << "=== DEBUG: Attempting to add CUDA provider ===" << endl;
-			session_options.AppendExecutionProvider_CUDA(cuda_options);
-			std::cout << "=== DEBUG: CUDA provider added successfully ===" << endl;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "=== WARNING: CUDA initialization failed ===" << endl;
-			std::cerr << "Error: " << e.what() << endl;
-			std::cerr << "Falling back to CPU execution..." << endl;
-			use_gpu = false;
-		}
+	// GPU已经在构造函数中初始化，这里只需要确认状态
+	if (!use_gpu) {
+		std::cerr << "=== ERROR: GPU not available in initializeOnnxruntimeInstances ===" << endl;
+		return DentalCbctSegAI_LOADING_FAIED;
 	}
-	// 线程设置
-	session_options.SetIntraOpNumThreads(1);
-	session_options.SetInterOpNumThreads(1);
 	
-	// 针对RTX 3060的优化设置
-	session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-	session_options.EnableMemPattern();
-	session_options.EnableCpuMemArena();
+	std::cout << "=== GPU session options already configured ===" << endl;
+	std::cout << "=== ONNX Runtime instances ready ===" << endl;
 	
-	if (use_gpu) {
-		// GPU特定优化
-		session_options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
-		std::cout << "=== DEBUG: GPU optimization settings applied ===" << endl;
-	} else {
-		// CPU特定优化
-		session_options.SetExecutionMode(ExecutionMode::ORT_PARALLEL);
-		session_options.SetIntraOpNumThreads(4);  // CPU模式下使用更多线程
-		std::cout << "=== DEBUG: CPU optimization settings applied ===" << endl;
-	}
-
-	// Ự
-	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
-
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
 
@@ -485,33 +528,42 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 {
 	std::cout << "=== DEBUG: slidingWindowInfer function start ===" << endl;
 	
-	// GPU设置已经在initializeOnnxruntimeInstances中完成，这里不需要重复设置
-	std::cout << "=== DEBUG: GPU setup already done in initialization ===" << endl;
+	if (!use_gpu) {
+		std::cerr << "=== ERROR: GPU not available in slidingWindowInfer ===" << endl;
+		return DentalCbctSegAI_STATUS_FAIED;
+	}
 
-	std::cout << "env setting is done: " << endl;
+	std::cout << "=== DEBUG: Using pre-configured GPU session options ===" << endl;
 
 	// 创建会话
 	std::cout << "=== DEBUG: Creating ONNX session ===" << endl;
-	
-	// 初始化ONNX Runtime设置
-	std::cout << "=== DEBUG: Initializing ONNX Runtime instances ===" << endl;
-	AI_INT init_status = initializeOnnxruntimeInstances();
-	if (init_status != DentalCbctSegAI_STATUS_SUCCESS) {
-		std::cerr << "Failed to initialize ONNX Runtime instances" << endl;
-		return init_status;
-	}
-	std::cout << "=== DEBUG: ONNX Runtime initialization completed ===" << endl;
-	
-	Ort::AllocatorWithDefaultOptions allocator;
-	//std::unique_ptr<Ort::Session> session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
-	// 获取输入输出信息
-	//const char* input_name  = session_ptr->GetInputNameAllocated(0, allocator).get();
-	//const char* output_name = session_ptr->GetOutputNameAllocated(0, allocator).get();
-	// 获取输入形状
-	//auto input_shape = session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
-
-	std::cout << "=== DEBUG: About to create Ort::Session ===" << endl;
 	std::wcout << L"Model file: " << config.model_file_name << endl;
+	
+	// 验证模型文件存在并获取文件信息
+	WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+	if (GetFileAttributesExW(config.model_file_name, GetFileExInfoStandard, &fileInfo)) {
+		LARGE_INTEGER fileSize;
+		fileSize.HighPart = fileInfo.nFileSizeHigh;
+		fileSize.LowPart = fileInfo.nFileSizeLow;
+		std::cout << "=== Model File Information ===" << endl;
+		std::cout << "Model file size: " << (fileSize.QuadPart / (1024.0 * 1024.0)) << " MB" << endl;
+		
+		// 估算模型内存需求（通常是文件大小的2-4倍）
+		std::cout << "Estimated memory requirement: " << (fileSize.QuadPart * 3 / (1024.0 * 1024.0)) << " MB (approx)" << endl;
+	} else {
+		std::cerr << "=== ERROR: Model file not found! ===" << endl;
+		return DentalCbctSegAI_LOADING_FAIED;
+	}
+	
+	// 输出当前内存状态
+	MEMORYSTATUSEX memInfo;
+	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+	if (GlobalMemoryStatusEx(&memInfo)) {
+		std::cout << "=== System Memory Status ===" << endl;
+		std::cout << "Total Physical Memory: " << (memInfo.ullTotalPhys / (1024 * 1024)) << " MB" << endl;
+		std::cout << "Available Physical Memory: " << (memInfo.ullAvailPhys / (1024 * 1024)) << " MB" << endl;
+		std::cout << "Memory Load: " << memInfo.dwMemoryLoad << "%" << endl;
+	}
 	
 	// 声明变量
 	Ort::Session* session_ptr = nullptr;
@@ -521,9 +573,19 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	std::vector<int64_t> input_shape;
 	
 	try {
+		std::cout << "=== About to create Ort::Session with pre-configured options ===" << endl;
+		// 直接使用预配置的session_options创建会话
 		session_ptr = new Ort::Session(env, config.model_file_name, session_options);
 		std::cout << "=== DEBUG: Session created successfully ===" << endl;
 		
+		// 获取模型输入输出信息
+		size_t num_input_nodes = session_ptr->GetInputCount();
+		size_t num_output_nodes = session_ptr->GetOutputCount();
+		std::cout << "=== Model Structure Information ===" << endl;
+		std::cout << "Number of inputs: " << num_input_nodes << endl;
+		std::cout << "Number of outputs: " << num_output_nodes << endl;
+		
+		Ort::AllocatorWithDefaultOptions allocator;
 		input_name = session_ptr->GetInputNameAllocated(0, allocator).get();
 		output_name = session_ptr->GetOutputNameAllocated(0, allocator).get();
 
@@ -533,7 +595,26 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		
 		std::cout << "=== DEBUG: Getting input shape ===" << endl;
 		input_shape = session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+		auto element_type = session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetElementType();
 		std::cout << "=== DEBUG: Input shape obtained ===" << endl;
+		
+		// 显示详细的输入信息
+		std::cout << "=== Model Input Tensor Details ===" << endl;
+		std::cout << "Input shape: ";
+		int64_t total_elements = 1;
+		for (size_t i = 0; i < input_shape.size(); ++i) {
+			std::cout << input_shape[i] << " ";
+			if (input_shape[i] > 0) {
+				total_elements *= input_shape[i];
+			}
+		}
+		std::cout << endl;
+		std::cout << "Input element type: " << element_type << " (1=float, 7=int64, 9=bool)" << endl;
+		
+		// 计算输入张量的内存需求
+		size_t bytes_per_element = (element_type == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) ? 4 : 4;
+		size_t input_memory_mb = (total_elements * bytes_per_element) / (1024 * 1024);
+		std::cout << "Input tensor memory requirement: " << input_memory_mb << " MB" << endl;
 
 		if (input_shape.size() != 5) {
 			std::cerr << "ERROR: Expected 5D input, got " << input_shape.size() << "D" << endl;
@@ -556,8 +637,17 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		std::cerr << "=== ONNX Session Creation Exception ===" << endl;
 		std::cerr << "Error code: " << e.GetOrtErrorCode() << endl;
 		std::cerr << "Error message: " << e.what() << endl;
+		
+		// 如果是CUDA相关错误，提供更详细的信息
+		std::string error_msg = e.what();
+		if (error_msg.find("CUBLAS_STATUS_ALLOC_FAILED") != std::string::npos) {
+			std::cerr << "=== CUBLAS Memory Allocation Failed ===" << endl;
+			std::cerr << "This usually means insufficient GPU memory" << endl;
+			std::cerr << "Try closing other GPU applications" << endl;
+		}
+		
 		if (session_ptr) delete session_ptr;
-		return DentalCbctSegAI_STATUS_FAIED;
+		return DentalCbctSegAI_LOADING_FAIED;
 	}
 	catch (const std::exception& e) {
 		std::cerr << "=== Session Creation Standard Exception ===" << endl;
@@ -589,6 +679,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	std::cout << "config.patch_size.size(): " << config.patch_size.size() << endl;
 	if (config.patch_size.size() < 3) {
 		std::cerr << "ERROR: config.patch_size.size() < 3, actual size: " << config.patch_size.size() << endl;
+		if (session_ptr) delete session_ptr;
 		return DentalCbctSegAI_STATUS_FAIED;
 	}
 	
@@ -621,9 +712,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	// 初始化预测概率图
 	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
 	CImg<float> count_vol = CImg<float>(width, height, depth, 1, 0.f);
-	//std::cout << "predSegProbVolume shape: " << depth << width << height << endl;
 
-	//CImg<float> input_patch = CImg<float>(config.patch_size[0], config.patch_size[1], config.patch_size[2], 1, 0.f);
 	CImg<float> win_pob = CImg<float>(config.patch_size[0], config.patch_size[1], config.patch_size[2], config.num_classes, 0.f);
 	CImg<float> gaussisan_weight = CImg<float>(config.patch_size[0], config.patch_size[1], config.patch_size[2], 1, 0.f);
 	create_3d_gaussian_kernel(gaussisan_weight, config.patch_size);
@@ -653,15 +742,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					std::cout << "current tile#: " << patch_count << endl;
 
 				CImg<float> input_patch = normalized_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
-				//std::cout << "input_patch mean: " << input_patch.mean() << endl;
-				//std::cout << "input_patch variance: " << input_patch.variance() << endl;
 				std::cout << "input_patch width: " << input_patch.width() << endl;
 				std::cout << "input_patch height: " << input_patch.height() << endl;
 				std::cout << "input_patch depth: " << input_patch.depth() << endl;
-
-				//std::vector<float> input_tensor_data;
-				//const float* input_patch_ptr = input_patch.data(0, 0, 0, 0);
-				//input_tensor_data.insert(input_tensor_data.end(), input_patch_ptr, input_patch_ptr + input_patch_voxel_numel);
 
 				float* input_data_ptr = input_patch.data();
 
@@ -687,9 +770,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				std::cout << endl;
 				std::cout << "input_patch_voxel_numel: " << input_patch_voxel_numel << endl;
 
-				//session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
-
-				//auto output_tensors = session_ptr->Run(
 				try {
 					std::cout << "=== DEBUG: Calling session.Run() ===" << endl;
 					auto output_tensors = session.Run(
@@ -720,7 +800,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					std::cout << "=== DEBUG: Data copied successfully ===" << endl;
 					
 					output_tensors.clear();
-					//input_tensor.release();
 
 					std::cout << "output_patch min: " << (win_pob.min)() << endl;
 					std::cout << "output_patch max: " << (win_pob.max)() << endl;
@@ -730,15 +809,18 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					std::cerr << "=== ONNX Runtime Exception ===" << endl;
 					std::cerr << "Error code: " << e.GetOrtErrorCode() << endl;
 					std::cerr << "Error message: " << e.what() << endl;
+					if (session_ptr) delete session_ptr;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 				catch (const std::exception& e) {
 					std::cerr << "=== Standard Exception ===" << endl;
 					std::cerr << "Error message: " << e.what() << endl;
+					if (session_ptr) delete session_ptr;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 				catch (...) {
 					std::cerr << "=== Unknown Exception ===" << endl;
+					if (session_ptr) delete session_ptr;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
@@ -868,6 +950,277 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 	std::memcpy(dstData->ptr_Data, output_seg_mask.data(), volSize);
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
+}
+
+// 新增GPU初始化函数
+bool DentalUnet::initializeGPU()
+{
+	std::cout << "=== Starting GPU initialization ===" << endl;
+	
+	// 输出ONNX Runtime版本信息
+	std::cout << "=== ONNX Runtime Version Information ===" << endl;
+	std::cout << "ONNX Runtime version: " << ORT_API_VERSION << endl;
+	
+	// 查询GPU信息
+	try {
+		// 尝试从系统CUDA路径加载
+		std::string cudaPath;
+		char* cudaPathEnv = nullptr;
+		size_t len = 0;
+		if (_dupenv_s(&cudaPathEnv, &len, "CUDA_PATH") == 0 && cudaPathEnv != nullptr) {
+			cudaPath = std::string(cudaPathEnv) + "\\bin\\";
+			free(cudaPathEnv);
+			std::cout << "Found CUDA_PATH: " << cudaPath << endl;
+		}
+		
+		// 动态加载CUDA运行时库 - 优先从系统路径加载
+		HMODULE cudaRt = nullptr;
+		if (!cudaPath.empty()) {
+			// 尝试从CUDA_PATH加载
+			std::string cudart12Path = cudaPath + "cudart64_12.dll";
+			cudaRt = LoadLibraryA(cudart12Path.c_str());
+			if (cudaRt) {
+				std::cout << "Loaded CUDA Runtime from system: " << cudart12Path << endl;
+			}
+		}
+		
+		// 如果系统路径加载失败，尝试当前目录
+		if (!cudaRt) {
+			cudaRt = LoadLibraryA("cudart64_12.dll");
+			if (cudaRt) {
+				std::cout << "Loaded CUDA Runtime: cudart64_12.dll from current directory" << endl;
+			} else {
+				std::cerr << "ERROR: Failed to load cudart64_12.dll" << endl;
+				std::cerr << "CUDA 12.x is required. Please install CUDA 12.x." << endl;
+			}
+		}
+		
+		if (cudaRt) {
+			// 定义函数指针类型
+			typedef int (*cudaGetDeviceCount_t)(int*);
+			typedef int (*cudaGetDeviceProperties_t)(void*, int);
+			typedef int (*cudaMemGetInfo_t)(size_t*, size_t*);
+			typedef const char* (*cudaGetErrorString_t)(int);
+			typedef int (*cudaRuntimeGetVersion_t)(int*);
+			typedef int (*cudaDriverGetVersion_t)(int*);
+			
+			// 获取函数地址
+			auto cudaGetDeviceCount = (cudaGetDeviceCount_t)GetProcAddress(cudaRt, "cudaGetDeviceCount");
+			auto cudaGetDeviceProperties = (cudaGetDeviceProperties_t)GetProcAddress(cudaRt, "cudaGetDeviceProperties");
+			auto cudaMemGetInfo = (cudaMemGetInfo_t)GetProcAddress(cudaRt, "cudaMemGetInfo");
+			auto cudaGetErrorString = (cudaGetErrorString_t)GetProcAddress(cudaRt, "cudaGetErrorString");
+			auto cudaRuntimeGetVersion = (cudaRuntimeGetVersion_t)GetProcAddress(cudaRt, "cudaRuntimeGetVersion");
+			auto cudaDriverGetVersion = (cudaDriverGetVersion_t)GetProcAddress(cudaRt, "cudaDriverGetVersion");
+			
+			// 获取CUDA版本信息
+			if (cudaRuntimeGetVersion && cudaDriverGetVersion) {
+				int runtimeVersion = 0;
+				int driverVersion = 0;
+				cudaRuntimeGetVersion(&runtimeVersion);
+				cudaDriverGetVersion(&driverVersion);
+				
+				std::cout << "=== CUDA Version Information ===" << endl;
+				std::cout << "CUDA Runtime version: " << (runtimeVersion/1000) << "." << ((runtimeVersion%1000)/10) << endl;
+				std::cout << "CUDA Driver version: " << (driverVersion/1000) << "." << ((driverVersion%1000)/10) << endl;
+			}
+			
+			if (cudaGetDeviceCount && cudaGetDeviceProperties && cudaMemGetInfo) {
+				int deviceCount = 0;
+				int result = cudaGetDeviceCount(&deviceCount);
+				
+				if (result == 0 && deviceCount > 0) {
+					std::cout << "=== CUDA Device Information ===" << endl;
+					std::cout << "Number of CUDA devices: " << deviceCount << endl;
+					
+					// 只查询内存信息，避免结构体兼容性问题
+					size_t free_mem = 0, total_mem = 0;
+					result = cudaMemGetInfo(&free_mem, &total_mem);
+					if (result == 0) {
+						std::cout << "  Total GPU memory: " << (total_mem / 1024 / 1024) << " MB" << endl;
+						std::cout << "  Free GPU memory: " << (free_mem / 1024 / 1024) << " MB" << endl;
+						std::cout << "  Used GPU memory: " << ((total_mem - free_mem) / 1024 / 1024) << " MB" << endl;
+					} else {
+						std::cout << "  Could not query GPU memory info" << endl;
+					}
+					std::cout << "===========================" << endl << endl;
+				}
+			}
+			FreeLibrary(cudaRt);
+		}
+	} catch (...) {
+		std::cout << "Note: Could not query GPU information, but continuing..." << endl;
+	}
+	
+	try {
+		// 创建测试会话选项
+		Ort::SessionOptions test_options;
+		
+		// RTX 3060 12GB 专用优化配置
+		OrtCUDAProviderOptions cuda_options{};
+		
+		// 内存配置 - 调整策略以支持CUBLAS初始化
+		cuda_options.device_id = 0;
+		cuda_options.gpu_mem_limit = 0;  // 0 表示不限制，让ONNX Runtime自行管理
+		cuda_options.arena_extend_strategy = 1;  // 1 = 按需分配（kSameAsRequested）
+		
+		// 性能优化配置 - 只使用支持的选项
+		cuda_options.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;  // 启发式搜索，更快
+		cuda_options.do_copy_in_default_stream = 1;  // 使用默认流进行拷贝
+		
+		std::cout << "=== GPU Memory Configuration ===" << endl;
+		std::cout << "GPU Memory Limit: Unlimited (0 = let ONNX Runtime manage)" << endl;
+		std::cout << "Arena Extend Strategy: On-demand (kSameAsRequested)" << endl;
+		std::cout << "CUDNN Conv Algo: Heuristic" << endl;
+		
+		// 添加CUDA提供者
+		std::cout << "=== Appending CUDA Execution Provider ===" << endl;
+		test_options.AppendExecutionProvider_CUDA(cuda_options);
+		std::cout << "=== CUDA Provider appended successfully ===" << endl;
+		
+		// 基本优化设置
+		test_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);  // 基本优化，避免过度优化
+		test_options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);  // 顺序执行
+		test_options.SetIntraOpNumThreads(1);  // GPU模式下使用单线程
+		test_options.SetInterOpNumThreads(1);
+		
+		// 内存优化
+		test_options.EnableMemPattern();
+		test_options.EnableCpuMemArena();
+		
+		// 创建会话选项，但延迟会话创建直到模型路径设置
+		std::cout << "=== Configuring GPU session options ===" << endl;
+		std::cout << "=== About to check model path ===" << endl;
+		
+		// 检查模型路径是否已设置
+		if (unetConfig.model_file_name != nullptr) {
+			std::cout << "=== Model path is not null ===" << endl;
+			std::wstring model_path = unetConfig.model_file_name;
+			
+			// 如果文件存在，尝试创建测试会话
+			if (GetFileAttributesW(model_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+				std::cout << "=== DEBUG: About to create Ort::Session ===" << endl;
+				std::wcout << L"Model file: " << model_path << endl;
+				
+				std::unique_ptr<Ort::Session> test_session;
+				test_session = std::make_unique<Ort::Session>(env, model_path.c_str(), test_options);
+				
+				std::cout << "=== GPU test session created successfully ===" << endl;
+				
+				// 验证会话信息
+				Ort::AllocatorWithDefaultOptions allocator;
+				auto input_name = test_session->GetInputNameAllocated(0, allocator);
+				auto output_name = test_session->GetOutputNameAllocated(0, allocator);
+				
+				std::cout << "Input name: " << input_name.get() << endl;
+				std::cout << "Output name: " << output_name.get() << endl;
+				
+				// 获取输入形状信息
+				auto input_shape = test_session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+				std::cout << "Input shape: ";
+				for (size_t i = 0; i < input_shape.size(); ++i) {
+					std::cout << input_shape[i] << " ";
+				}
+				std::cout << endl;
+			} else {
+				std::cout << "=== Model file not found, skipping test session ===" << endl;
+			}
+		} else {
+			std::cout << "=== Skipping test session creation (model path not set yet) ===" << endl;
+		}
+		
+		// 保存成功的配置
+		session_options = std::move(test_options);
+		
+		std::cout << "=== GPU initialization completed successfully ===" << endl;
+		return true;
+		
+	} catch (const Ort::Exception& e) {
+		std::cerr << "=== ONNX GPU Initialization Exception ===" << endl;
+		std::cerr << "Error code: " << e.GetOrtErrorCode() << endl;
+		std::cerr << "Error message: " << e.what() << endl;
+		
+		// 分析错误类型
+		std::string error_msg = e.what();
+		if (error_msg.find("CUDA") != std::string::npos || 
+			error_msg.find("CUBLAS") != std::string::npos ||
+			error_msg.find("CUDNN") != std::string::npos) {
+			std::cerr << "=== CUDA/CUBLAS/CUDNN related error detected ===" << endl;
+			
+			// 尝试降低内存限制重试
+			return retryGPUWithLowerMemory();
+		}
+		
+		return false;
+		
+	} catch (const std::exception& e) {
+		std::cerr << "=== Standard GPU Initialization Exception ===" << endl;
+		std::cerr << "Error message: " << e.what() << endl;
+		return false;
+		
+	} catch (...) {
+		std::cerr << "=== Unknown GPU Initialization Exception ===" << endl;
+		return false;
+	}
+}
+
+// 新增GPU内存降级重试函数
+bool DentalUnet::retryGPUWithLowerMemory()
+{
+	std::cout << "=== Retrying GPU initialization with lower memory settings ===" << endl;
+	
+	std::vector<size_t> memory_limits = {
+		4ULL * 1024 * 1024 * 1024,  // 4GB
+		3ULL * 1024 * 1024 * 1024,  // 3GB
+		2ULL * 1024 * 1024 * 1024,  // 2GB
+		1ULL * 1024 * 1024 * 1024   // 1GB
+	};
+	
+	for (size_t mem_limit : memory_limits) {
+		std::cout << "=== Trying with " << (mem_limit / (1024*1024*1024)) << "GB memory limit ===" << endl;
+		
+		try {
+			Ort::SessionOptions retry_options;
+			
+			OrtCUDAProviderOptions cuda_options{};
+			cuda_options.device_id = 0;
+			cuda_options.gpu_mem_limit = mem_limit;
+			cuda_options.arena_extend_strategy = 0;  // 固定内存分配
+			cuda_options.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchDefault;  // 默认算法
+			cuda_options.do_copy_in_default_stream = 1;
+			
+			retry_options.AppendExecutionProvider_CUDA(cuda_options);
+			retry_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_DISABLE_ALL);  // 禁用优化
+			retry_options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+			retry_options.SetIntraOpNumThreads(1);
+			retry_options.SetInterOpNumThreads(1);
+			
+			// 测试会话创建 - 使用配置中的模型路径
+			if (unetConfig.model_file_name != nullptr) {
+				std::wstring model_path = unetConfig.model_file_name;
+				if (GetFileAttributesW(model_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+					std::unique_ptr<Ort::Session> test_session;
+					test_session = std::make_unique<Ort::Session>(env, model_path.c_str(), retry_options);
+					std::cout << "=== GPU retry test session created ===" << endl;
+				}
+			}
+			
+			std::cout << "=== GPU retry successful with " << (mem_limit / (1024*1024*1024)) << "GB ===" << endl;
+			
+			// 保存成功的配置
+			session_options = std::move(retry_options);
+			return true;
+			
+		} catch (const Ort::Exception& e) {
+			std::cerr << "=== Retry failed with " << (mem_limit / (1024*1024*1024)) << "GB: " << e.what() << endl;
+			continue;
+		} catch (...) {
+			std::cerr << "=== Unknown error with " << (mem_limit / (1024*1024*1024)) << "GB ===" << endl;
+			continue;
+		}
+	}
+	
+	std::cerr << "=== All GPU memory retry attempts failed ===" << endl;
+	return false;
 }
 
 

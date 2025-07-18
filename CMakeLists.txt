@@ -1,4 +1,4 @@
-mecmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.20)
 project(nnuNet_cpp CXX)
 
 # 设置C++标准

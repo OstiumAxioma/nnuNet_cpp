@@ -75,8 +75,16 @@ The API uses status codes:
 - `DentalCbctSegAI_STATUS_FAIED` (5) - General segmentation failure
 - `DentalCbctSegAI_LOADING_FAIED` (6) - Model loading failed
 
-## Known Issues
+## Known Issues and Fixes
 
+### Fixed Issues
+1. **Vector subscript out of range error** (Fixed)
+   - Location: `DentalUnet.cpp`, line 204-205 in `segModelInfer()` function
+   - Problem: Code was accessing `config.patch_size[3]` when the vector only has 3 elements (indices 0-2)
+   - Fix: Changed `config.patch_size[3]` to `config.patch_size[i]` to use the correct index
+   - This was causing runtime assertion failures when processing input data
+
+### Remaining Issues
 1. String encoding: Headers contain non-UTF8 characters (GBK encoding)
 2. The actual model being used (kneeseg_test.onnx) may not match the dental segmentation purpose
 3. GPU memory issues may occur with large volumes when using CUDA provider

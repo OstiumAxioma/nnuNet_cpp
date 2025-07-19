@@ -8,11 +8,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <map>
-#include <windows.h>  // 用于GetFileAttributesW, SetDllDirectory, AddDllDirectory
 #include "../../lib/onnxruntime/include/onnxruntime_cxx_api.h"
-
-// CUDA runtime for device query
-// 使用动态加载，不需要链接cudart.lib
 
 #define cimg_display_type 2
 #include "../../lib/CImg/CImg.h"
@@ -63,8 +59,7 @@ public:
 
 	static DentalUnet *CreateDentalUnet();
 
-	void    setModelFns(const char* model_fn);
-	void    setModelFns(const wchar_t* model_fn);  // Keep for backward compatibility
+	void    setModelFns(const wchar_t* model_fn);
 
 	void    setStepSizeRatio(float ratio);
 
@@ -80,7 +75,7 @@ private:
 	bool   use_gpu;
 	Ort::Env env;
 
-	//输入：原始CBCT数据体
+	//���룺����CBCT������
 	CImg<short> input_cbct_volume;
 
 	float intensity_mean;
@@ -93,7 +88,7 @@ private:
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
 
-	//输出：分割结果三维Mask
+	//������ָ�������άMask
 	CImg<float> predicted_output_prob;
 	CImg<short> output_seg_mask;
 
@@ -103,24 +98,19 @@ private:
 	//std::unique_ptr<Ort::Session> semantic_seg_session_ptr;
 	//std::unique_ptr<Ort::Session> ian_seg_session_ptr;
 
-	//模型配置参数
+	//ģ�����ò���
 	nnUNetConfig unetConfig;
 
-	//输入CBCT数据体
+	//����CBCT������
 	AI_INT  setInput(AI_DataInfo *srcData); 
 
 	AI_INT  initializeOnnxruntimeInstances();
 
-	// GPU初始化相关函数
-	bool    initializeGPU();
-	bool    retryGPUWithLowerMemory();
-	void    diagnoseCUDALibraries();
-
-	//uunet分割模型推理：输入分割
+	//uunet�ָ�ģ�ͻ����������ָ�
 	AI_INT  segModelInfer(nnUNetConfig config, CImg<short> input_volume);
 	AI_INT  slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume);
 
-	AI_INT   postProcessing();// 对分割结果进行后处理
+	AI_INT   postProcessing();// �Էָ������к���
 
 	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
 	void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);

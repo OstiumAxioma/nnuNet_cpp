@@ -1,5 +1,8 @@
-#include "../header/DentalCbctSegAI_API.h"
-#include "../header/DentalUnet.h"
+#include "DentalCbctSegAI_API.h"
+#include "DentalUnet.h"
+#include <string>
+#include <cstring>
+#include <cwchar>
 
 
 DentalCbctSegAI_API AI_HANDLE    DentalCbctSegAI_CreateObj()
@@ -24,8 +27,12 @@ DentalCbctSegAI_API AI_INT    DentalCbctSegAI_SetModelPath(AI_HANDLE AI_Hdl, AI_
 	if (AI_Hdl == NULL)
 		return DentalCbctSegAI_STATUS_HANDLE_NULL;
 
+	if (fn == NULL)
+		return DentalCbctSegAI_STATUS_FAIED;
+
 	DentalUnet *pAIObj = reinterpret_cast<DentalUnet *>(AI_Hdl);
 
+	// AI_STRING is already wchar_t* in static library header
 	pAIObj->setModelFns(fn);
 
 	return DentalCbctSegAI_STATUS_SUCCESS;

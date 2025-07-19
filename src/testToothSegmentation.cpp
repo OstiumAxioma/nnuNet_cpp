@@ -203,7 +203,9 @@ int main()
 	std::string modelPath = "..\\..\\..\\model\\kneeseg_test.onnx";
 	std::cout << "Setting model path..." << std::endl;
 	std::cout << "模型文件: " << modelPath << std::endl;
-	AI_INT status1 = DentalCbctSegAI_SetModelPath(AI_Hdl, const_cast<char*>(modelPath.c_str()));
+	// 转换为宽字符串
+	std::wstring wModelPath(modelPath.begin(), modelPath.end());
+	AI_INT status1 = DentalCbctSegAI_SetModelPath(AI_Hdl, const_cast<wchar_t*>(wModelPath.c_str()));
 	std::cout << "SetModelPath返回状态: " << status1 << std::endl;
 
 	// 设置TileStepRatio

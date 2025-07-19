@@ -63,8 +63,17 @@ Status codes:
   - Upper teeth: k = 1,2,3...
   - Lower teeth: k = -1,-2,-3...
 
-## Common Issues
+## Common Issues and Fixes
 
+### Fixed Issues
+1. **Vector subscript out of range error in DentalCbctOnnxSegDLL** (Fixed)
+   - Location: `static/src/DentalUnet.cpp`, line 204-205
+   - Error: "vector subscript out of range" assertion failure
+   - Cause: Accessing `config.patch_size[3]` when vector only has 3 elements
+   - Fix: Changed to `config.patch_size[i]` to use correct loop index
+
+### General Issues
 1. Missing .img file: Analyze format requires both .hdr and .img files
 2. DLL dependencies: Ensure all ONNX Runtime and DentalCbctOnnxSegDLL DLLs are in the executable directory
 3. Path issues: The executable expects to run from build\bin\Release\ with resources in the project root
+4. Model path: Must use wide character string (wchar_t*) when calling DentalCbctSegAI_SetModelPath

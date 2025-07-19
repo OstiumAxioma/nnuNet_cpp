@@ -1,4 +1,5 @@
 #include "DentalUnet.h"
+#include <cstring>
 
 DentalUnet::DentalUnet()
 {
@@ -354,12 +355,22 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		
 		Ort::Session session(env, config.model_file_name, session_options);
 		
-		const char* input_name  = session.GetInputNameAllocated(0, allocator).get();
-		const char* output_name = session.GetOutputNameAllocated(0, allocator).get();
+		// 使用AllocatedStringPtr来管理内存
+		Ort::AllocatedStringPtr input_name_ptr = session.GetInputNameAllocated(0, allocator);
+		Ort::AllocatedStringPtr output_name_ptr = session.GetOutputNameAllocated(0, allocator);
+		
+		const char* input_name = input_name_ptr.get();
+		const char* output_name = output_name_ptr.get();
 
 		std::cout << "Session loading is done: " << endl;
 		std::cout << "input_name: " << input_name << endl;
 		std::cout << "output_name: " << output_name << endl;
+		
+		// 验证输入输出名称
+		if (strcmp(input_name, output_name) == 0) {
+			std::cerr << "[WARNING] Input and output have the same name: " << input_name << endl;
+			std::cerr << "[WARNING] This might indicate a problem with the ONNX model" << endl;
+		}
 		auto input_shape = session.GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
 
 	if (input_shape.size() != 5) {

@@ -238,12 +238,20 @@ int main()
 	
 	std::cout << "模型推理完成，状态码: " << AIWorkStatus << std::endl;
 	
+	// 检查推理状态
+	if (AIWorkStatus != DentalCbctSegAI_STATUS_SUCCESS) {
+		std::cerr << "ERROR: Model inference failed with status: " << AIWorkStatus << std::endl;
+		// 释放资源
+		if (AI_Hdl) DentalCbctSegAI_ReleseObj(AI_Hdl);
+		if (srcData) free(srcData);
+		if (toothSegData) free(toothSegData);
+		system("pause");
+		return AIWorkStatus;
+	}
 
 	//获取牙齿分割结果
-	if (AIWorkStatus == DentalCbctSegAI_STATUS_SUCCESS)
-		DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
-	else
-		return AIWorkStatus;
+	std::cout << "Getting segmentation results..." << std::endl;
+	DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
 
 	//释放对象
 	DentalCbctSegAI_ReleseObj(AI_Hdl);

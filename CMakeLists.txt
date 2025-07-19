@@ -87,18 +87,26 @@ endif()
 
 # 复制DLL文件到输出目录（运行时需要）
 if(WIN32)
-    # 复制ONNX Runtime DLL文件
-    add_custom_command(TARGET testToothSegmentation POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/lib/onnxruntime/lib/onnxruntime.dll
-            $<TARGET_FILE_DIR:testToothSegmentation>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/lib/onnxruntime/lib/onnxruntime_providers_shared.dll
-            $<TARGET_FILE_DIR:testToothSegmentation>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/lib/onnxruntime/lib/onnxruntime_providers_cuda.dll
-            $<TARGET_FILE_DIR:testToothSegmentation>
-    )
+    # 复制ONNX Runtime DLL文件 - 必须从lib/run目录复制
+    # 检查lib/run目录是否存在
+    if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/lib/run)
+        message(FATAL_ERROR "Required directory lib/run not found! This directory should contain all runtime DLLs.")
+    endif()
+    
+    # 从lib/run复制所有DLL文件
+    file(GLOB RUNTIME_DLLS ${CMAKE_CURRENT_SOURCE_DIR}/lib/run/*.dll)
+    if(NOT RUNTIME_DLLS)
+        message(FATAL_ERROR "No DLL files found in lib/run directory!")
+    endif()
+    
+    foreach(dll_file ${RUNTIME_DLLS})
+        add_custom_command(TARGET testToothSegmentation POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${dll_file}
+                $<TARGET_FILE_DIR:testToothSegmentation>
+        )
+    endforeach()
+    message(STATUS "Found ${CMAKE_CURRENT_SOURCE_DIR}/lib/run directory with runtime DLLs")
     
     # 复制DentalCbctOnnxSegDLL.dll
     add_custom_command(TARGET testToothSegmentation POST_BUILD

@@ -44,7 +44,34 @@ echo ========================================
 echo Solution file: build\nnuNet_cpp.sln
 echo Executable: build\bin\Release\testToothSegmentation.exe
 echo.
-echo Note: If you get DentalCbctOnnxSegDLL.dll missing error,
-echo       please copy it manually to build\bin\Release\
+
+:: 复制运行时库
+echo Copying runtime libraries from lib\run to build\bin\Release...
+if not exist lib\run (
+    echo.
+    echo ERROR: lib\run directory not found!
+    echo This directory must contain all required runtime DLLs.
+    echo Please ensure lib\run exists with all necessary ONNX Runtime and CUDA DLLs.
+    echo.
+    pause
+    exit /b 1
+)
+
+xcopy /Y /Q lib\run\*.dll build\bin\Release\
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Failed to copy runtime libraries!
+    pause
+    exit /b 1
+)
+echo Runtime libraries copied successfully!
+
+:: 确保DentalCbctOnnxSegDLL.dll也被复制
+if exist lib\DentalCbctOnnxSegDLL.dll (
+    copy /Y lib\DentalCbctOnnxSegDLL.dll build\bin\Release\
+    echo DentalCbctOnnxSegDLL.dll copied successfully!
+)
+
+echo.
+echo All dependencies should now be in place.
 echo.
 pause

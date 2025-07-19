@@ -72,8 +72,25 @@ Status codes:
    - Cause: Accessing `config.patch_size[3]` when vector only has 3 elements
    - Fix: Changed to `config.patch_size[i]` to use correct loop index
 
+2. **ONNX Runtime memory management and segmentation fault** (Fixed)
+   - Location: `static/src/DentalUnet.cpp`, line 357-358
+   - Error: Segmentation fault after "Invalid input name" error
+   - Cause: `GetInputNameAllocated()` returns an `AllocatedStringPtr` smart pointer. Using `.get()` directly caused the pointer to be freed when the smart pointer went out of scope
+   - Fix: Store the `AllocatedStringPtr` objects to keep them alive throughout the function:
+     ```cpp
+     Ort::AllocatedStringPtr input_name_ptr = session.GetInputNameAllocated(0, allocator);
+     Ort::AllocatedStringPtr output_name_ptr = session.GetOutputNameAllocated(0, allocator);
+     const char* input_name = input_name_ptr.get();
+     const char* output_name = output_name_ptr.get();
+     ```
+   - This ensures the memory remains valid when used later in `session.Run()`
+
 ### General Issues
 1. Missing .img file: Analyze format requires both .hdr and .img files
 2. DLL dependencies: Ensure all ONNX Runtime and DentalCbctOnnxSegDLL DLLs are in the executable directory
 3. Path issues: The executable expects to run from build\bin\Release\ with resources in the project root
 4. Model path: Must use wide character string (wchar_t*) when calling DentalCbctSegAI_SetModelPath
+
+## Code Analysis Memories
+
+- 不要使用模型文件名来分析代码，kneeseg_test仅仅是名称，并不以意味着它不能用于牙齿分割或其它分割

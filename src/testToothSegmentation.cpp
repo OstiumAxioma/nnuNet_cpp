@@ -141,8 +141,14 @@ int main()
 		std::cout << "正在加载HDR图像文件..." << std::endl;
 		std::cout << "文件路径: " << inputHdrPath << std::endl;
 		CImg<short> inputCbctVolume;
-		inputCbctVolume.load_analyze(inputHdrPath.c_str());
+		
+		// 从HDR文件读取真实的voxel spacing
+		float real_voxel_size[3] = {0, 0, 0};
+		inputCbctVolume.load_analyze(inputHdrPath.c_str(), real_voxel_size);
 		std::cout << "HDR文件加载成功" << std::endl;
+		std::cout << "原始图像真实spacing: X=" << real_voxel_size[0] 
+		         << ", Y=" << real_voxel_size[1] 
+		         << ", Z=" << real_voxel_size[2] << " mm" << std::endl;
 
 	float VoxelSpacing  = 1.0f; //unit: mm  0.3
 	float VoxelSpacingX = 0.5810545086860657f; //unit: mm  0.3
@@ -284,7 +290,10 @@ int main()
 	_mkdir(resultDir.c_str()); // 如果目录已存在会失败，但不影响
 	
 	std::string resultPath = resultDir + "\\finalLabelMask.hdr";
-	toothLabelMask.save_analyze(resultPath.c_str());
+	
+	// 重要：保存时使用原始图像的真实spacing，而不是归一化的spacing
+	// 这样结果就能与原始图像在相同的物理空间中对齐
+	toothLabelMask.save_analyze(resultPath.c_str(), real_voxel_size);
 
 		std::cout << "\n程序执行成功完成!" << std::endl;
 		

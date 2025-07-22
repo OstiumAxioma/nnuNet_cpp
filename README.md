@@ -1,6 +1,6 @@
 # nnuNet_cpp - 3D医学图像分割
 
-基于ONNX Runtime的C++实现的3D医学图像分割程序，专门用于牙科/医学CBCT图像分析。
+基于ONNX Runtime的C++实现的3D医学图像分割程序
 
 ## 构建脚本说明
 
@@ -11,7 +11,7 @@
   - 创建构建目录
   - 生成Visual Studio 2022解决方案
   - 编译主程序
-  - 从`lib/run`目录复制运行时DLL到可执行文件目录
+  - 从`lib/run`目录复制运行时DLL到可执行文件目录（由于代码库限制目前需要自行找云重拿取完整的版本对应的运行库）
 
 ### 2. 静态库构建脚本：`static/build.bat`
 - **用途**：构建分割核心DLL库（`DentalCbctOnnxSegDLL.dll`）
@@ -152,7 +152,7 @@ static/
 
 ## 部署注意事项
 
-1. 确保`lib/run/`中的所有DLL都存在于可执行文件相同的目录中
+1. 确保`lib/run/`中的所有DLL都存在于可执行文件相同的目录中（Release目录）
 2. 程序需要支持CUDA的NVIDIA GPU以获得最佳性能
 3. 输入图像必须是Analyze格式（需要.hdr和.img两个文件）
 4. 运行前如果`result/`目录不存在，需要先创建

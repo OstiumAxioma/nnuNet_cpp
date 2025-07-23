@@ -219,6 +219,18 @@ int main()
 	AI_INT status2 = DentalCbctSegAI_SetTileStepRatio(AI_Hdl, tileRatio);
 	std::cout << "SetTileStepRatio(" << tileRatio << ")返回状态: " << status2 << std::endl;
 
+	// 设置输出路径以保存三个阶段的中间结果
+	std::wstring preprocessPath = L"..\\..\\..\\result\\preprocess";
+	std::wstring modelOutputPath = L"..\\..\\..\\result\\model_output";
+	std::wstring postprocessPath = L"..\\..\\..\\result\\postprocess";
+	
+	std::cout << "\n设置中间结果输出路径..." << std::endl;
+	AI_INT status3 = DentalCbctSegAI_SetOutputPaths(AI_Hdl, 
+	                                                const_cast<wchar_t*>(preprocessPath.c_str()),
+	                                                const_cast<wchar_t*>(modelOutputPath.c_str()),
+	                                                const_cast<wchar_t*>(postprocessPath.c_str()));
+	std::cout << "SetOutputPaths返回状态: " << status3 << std::endl;
+
 	// 打印输入数据信息
 	std::cout << "\n输入数据信息:" << std::endl;
 	std::cout << "  尺寸: " << srcData->Width << " x " << srcData->Height << " x " << srcData->Depth << std::endl;
@@ -314,6 +326,11 @@ int main()
 		std::cout << "  - 分割结果: " << resultPath << std::endl;
 		std::cout << "  - 绝对路径: D:\\Project\\nnuNet_cpp\\result\\finalLabelMask.hdr" << std::endl;
 		std::cout << "  - 注意: HDR格式会同时生成.hdr和.img两个文件" << std::endl;
+		
+		std::cout << "\n中间结果保存路径:" << std::endl;
+		std::cout << "  - 预处理结果: ..\\..\\..\\result\\preprocess" << std::endl;
+		std::cout << "  - 模型输出: ..\\..\\..\\result\\model_output" << std::endl;
+		std::cout << "  - 后处理结果: ..\\..\\..\\result\\postprocess" << std::endl;
 		
 		// 获取当前时间
 		auto now = std::chrono::system_clock::now();

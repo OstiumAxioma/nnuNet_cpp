@@ -77,6 +77,23 @@ DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_
 }
 
 
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetOutputPaths(AI_HANDLE AI_Hdl, 
+                                                                 AI_STRING preprocessPath, 
+                                                                 AI_STRING modelOutputPath, 
+                                                                 AI_STRING postprocessPath)
+{
+	if (AI_Hdl == NULL)
+		return DentalCbctSegAI_STATUS_HANDLE_NULL;
+
+	DentalUnet *pAIObj = reinterpret_cast<DentalUnet *>(AI_Hdl);
+	
+	// AI_STRING is already wchar_t* in static library header
+	pAIObj->setOutputPaths(preprocessPath, modelOutputPath, postprocessPath);
+
+	return DentalCbctSegAI_STATUS_SUCCESS;
+}
+
+
 DentalCbctSegAI_API AI_VOID      DentalCbctSegAI_ReleseObj(AI_HANDLE AI_Hdl)
 {
 	if (AI_Hdl == NULL)

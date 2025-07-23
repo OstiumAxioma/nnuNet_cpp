@@ -69,6 +69,9 @@ public:
 
 	void    setDnnOptions(); //�������ã��Ƿ�cuda��opengl����չ��
 	void    setAlgParameter();
+	
+	// �����������·��
+	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
 
 private:
 	bool   NETDEBUG_FLAG;
@@ -100,6 +103,12 @@ private:
 
 	//ģ�����ò���
 	nnUNetConfig unetConfig;
+	
+	// �������·��
+	std::wstring preprocessOutputPath;
+	std::wstring modelOutputPath;
+	std::wstring postprocessOutputPath;
+	bool saveIntermediateResults;
 
 	//����CBCT������
 	AI_INT  setInput(AI_DataInfo *srcData); 
@@ -115,5 +124,11 @@ private:
 	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
 	void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);
 	CImg<short> argmax_spectrum(const CImg<float>& input);
+	
+	// �����������ļ��ķ���
+	void    savePreprocessedData(const CImg<float>& data, const std::wstring& filename);
+	void    saveModelOutput(const CImg<float>& data, const std::wstring& filename);
+	void    savePostprocessedData(const CImg<short>& data, const std::wstring& filename);
+	void    saveTile(const CImg<float>& tile, int tileIndex, int x, int y, int z);
 };
 #endif

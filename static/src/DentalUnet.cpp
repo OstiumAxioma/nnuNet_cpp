@@ -1,5 +1,9 @@
 #include "DentalUnet.h"
 #include <cstring>
+#include <sstream>
+#include <iomanip>
+#include <filesystem>
+#include <fstream>
 
 DentalUnet::DentalUnet()
 {
@@ -39,6 +43,9 @@ DentalUnet::DentalUnet()
 	unetConfig.min_max_HU = { -172.01852416992188f,  1824.9935302734375f };
 	unetConfig.mean_std_HU = { 274.2257080078125f, 366.05450439453125f };
 	unetConfig.use_mirroring = false;
+	
+	// Initialize output paths
+	saveIntermediateResults = false;
 }
 
 
@@ -94,6 +101,31 @@ void  DentalUnet::setDnnOptions()
 void  DentalUnet::setAlgParameter()
 {
 	//????????????????
+}
+
+
+void DentalUnet::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath)
+{
+	if (preprocessPath != nullptr) {
+		preprocessOutputPath = preprocessPath;
+		// Create directory if not exists
+		std::filesystem::create_directories(preprocessPath);
+	}
+	
+	if (modelOutputPath != nullptr) {
+		this->modelOutputPath = modelOutputPath;
+		// Create directory if not exists
+		std::filesystem::create_directories(modelOutputPath);
+	}
+	
+	if (postprocessPath != nullptr) {
+		postprocessOutputPath = postprocessPath;
+		// Create directory if not exists
+		std::filesystem::create_directories(postprocessPath);
+	}
+	
+	// Enable saving if any path is set
+	saveIntermediateResults = (preprocessPath != nullptr || modelOutputPath != nullptr || postprocessPath != nullptr);
 }
 
 
@@ -295,6 +327,11 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "normalized_input_volume mean: " << scaled_input_volume.mean() << endl;
 	std::cout << "normalized_input_volume variance: " << scaled_input_volume.variance() << endl;
 
+	// Save preprocessed data
+	if (saveIntermediateResults) {
+		savePreprocessedData(scaled_input_volume, L"preprocessed_normalized_volume");
+	}
+
 	//?????????????
 	std::cout << "[DEBUG] Calling slidingWindowInfer..." << endl;
 	try {
@@ -316,7 +353,17 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	if (is_volume_scaled)
 		predicted_output_prob.resize(input_size[0], input_size[1], input_size[2], config.num_classes, 3);
 
+	// Save model output (probability volume)
+	if (saveIntermediateResults) {
+		saveModelOutput(predicted_output_prob, L"model_output_probability");
+	}
+
 	output_seg_mask = argmax_spectrum(predicted_output_prob);
+
+	// Save postprocessed data
+	if (saveIntermediateResults) {
+		savePostprocessedData(output_seg_mask, L"postprocessed_segmentation_mask");
+	}
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
@@ -392,19 +439,19 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	// x Image width, y Image height, z Image depth
 	float step_size_ratio = config.step_size_ratio;
 	float actualStepSize[3];
-	int X_num_steps = (int)ceil(float(width - config.patch_size[0]) / (config.patch_size[0] * step_size_ratio)) + 1; //X
+	int X_num_steps = (int)ceil(float(width - config.patch_size[0]) / (config.patch_size[0] * step_size_ratio)); //X
 	if (X_num_steps > 1)
 		actualStepSize[0] = float(width - config.patch_size[0]) / (X_num_steps - 1);
 	else
 		actualStepSize[0] = 999999.f;
 
-	int Y_num_steps = (int)ceil(float(height - config.patch_size[1]) / (config.patch_size[1] * step_size_ratio)) + 1; //Y
+	int Y_num_steps = (int)ceil(float(height - config.patch_size[1]) / (config.patch_size[1] * step_size_ratio)); //Y
 	if (Y_num_steps > 1)
 		actualStepSize[1] = float(height - config.patch_size[1]) / (Y_num_steps - 1);
 	else
 		actualStepSize[1] = 999999.f;
 
-	int Z_num_steps = (int)ceil(float(depth - config.patch_size[2]) / (config.patch_size[2] * step_size_ratio)) + 1; //Y
+	int Z_num_steps = (int)ceil(float(depth - config.patch_size[2]) / (config.patch_size[2] * step_size_ratio)); //Y
 	if (Z_num_steps > 1)
 		actualStepSize[2] = float(depth - config.patch_size[2]) / (Z_num_steps - 1);
 	else
@@ -559,6 +606,11 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				std::cout << "  - Mean: " << win_pob.mean() << endl;
 				std::cout << "  - Dimensions: " << win_pob.width() << "x" << win_pob.height() << "x" << win_pob.depth() << "x" << win_pob.spectrum() << endl;
 
+				// Save individual tile
+				if (saveIntermediateResults) {
+					saveTile(win_pob, patch_count, lb_x, lb_y, lb_z);
+				}
+
 				std::cout << "[DEBUG] Accumulating patch results..." << endl;
 				try {
 					cimg_forXYZC(win_pob, x, y, z, c) {
@@ -684,6 +736,154 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 	std::memcpy(dstData->ptr_Data, output_seg_mask.data(), volSize);
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
+}
+
+
+void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstring& filename)
+{
+	if (!saveIntermediateResults || preprocessOutputPath.empty()) return;
+	
+	// Save as HDR format for visualization
+	std::wstring hdrPath = preprocessOutputPath + L"\\" + filename + L".hdr";
+	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	data.save(narrowHdrPath.c_str());
+	
+	// Save as raw binary for numpy
+	std::wstring rawPath = preprocessOutputPath + L"\\" + filename + L".raw";
+	std::wstring metaPath = preprocessOutputPath + L"\\" + filename + L"_meta.txt";
+	
+	std::string narrowRawPath(rawPath.begin(), rawPath.end());
+	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
+	
+	// Save raw data
+	std::ofstream rawFile(narrowRawPath, std::ios::binary);
+	rawFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(float));
+	rawFile.close();
+	
+	// Save metadata for Python
+	std::ofstream metaFile(narrowMetaPath);
+	metaFile << "dtype: float32" << std::endl;
+	metaFile << "shape: (" << data.depth() << ", " << data.height() << ", " << data.width() << ")" << std::endl;
+	metaFile << "order: C" << std::endl;
+	metaFile << "description: Preprocessed normalized volume" << std::endl;
+	metaFile.close();
+	
+	std::cout << "[DEBUG] Saved preprocessed data:" << std::endl;
+	std::cout << "  - HDR format: " << narrowHdrPath << std::endl;
+	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
+}
+
+
+void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& filename)
+{
+	if (!saveIntermediateResults || modelOutputPath.empty()) return;
+	
+	// Save as HDR format for visualization
+	std::wstring hdrPath = modelOutputPath + L"\\" + filename + L".hdr";
+	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	data.save(narrowHdrPath.c_str());
+	
+	// Save as raw binary for numpy
+	std::wstring rawPath = modelOutputPath + L"\\" + filename + L".raw";
+	std::wstring metaPath = modelOutputPath + L"\\" + filename + L"_meta.txt";
+	
+	std::string narrowRawPath(rawPath.begin(), rawPath.end());
+	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
+	
+	// Save raw data
+	std::ofstream rawFile(narrowRawPath, std::ios::binary);
+	rawFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(float));
+	rawFile.close();
+	
+	// Save metadata for Python
+	std::ofstream metaFile(narrowMetaPath);
+	metaFile << "dtype: float32" << std::endl;
+	metaFile << "shape: (" << data.spectrum() << ", " << data.depth() << ", " << data.height() << ", " << data.width() << ")" << std::endl;
+	metaFile << "order: C" << std::endl;
+	metaFile << "description: Model output probability volume (channels, depth, height, width)" << std::endl;
+	metaFile.close();
+	
+	std::cout << "[DEBUG] Saved model output:" << std::endl;
+	std::cout << "  - HDR format: " << narrowHdrPath << std::endl;
+	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
+}
+
+
+void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstring& filename)
+{
+	if (!saveIntermediateResults || postprocessOutputPath.empty()) return;
+	
+	// Save as HDR format for visualization
+	std::wstring hdrPath = postprocessOutputPath + L"\\" + filename + L".hdr";
+	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	data.save(narrowHdrPath.c_str());
+	
+	// Save as raw binary for numpy
+	std::wstring rawPath = postprocessOutputPath + L"\\" + filename + L".raw";
+	std::wstring metaPath = postprocessOutputPath + L"\\" + filename + L"_meta.txt";
+	
+	std::string narrowRawPath(rawPath.begin(), rawPath.end());
+	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
+	
+	// Save raw data
+	std::ofstream rawFile(narrowRawPath, std::ios::binary);
+	rawFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(short));
+	rawFile.close();
+	
+	// Save metadata for Python
+	std::ofstream metaFile(narrowMetaPath);
+	metaFile << "dtype: int16" << std::endl;
+	metaFile << "shape: (" << data.depth() << ", " << data.height() << ", " << data.width() << ")" << std::endl;
+	metaFile << "order: C" << std::endl;
+	metaFile << "description: Postprocessed segmentation mask" << std::endl;
+	metaFile.close();
+	
+	std::cout << "[DEBUG] Saved postprocessed data:" << std::endl;
+	std::cout << "  - HDR format: " << narrowHdrPath << std::endl;
+	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
+}
+
+
+void DentalUnet::saveTile(const CImg<float>& tile, int tileIndex, int x, int y, int z)
+{
+	if (!saveIntermediateResults || modelOutputPath.empty()) return;
+	
+	// Create tiles subdirectory if not exists
+	std::filesystem::create_directories(modelOutputPath + L"\\tiles");
+	
+	std::wstringstream ss;
+	ss << L"tile_" << std::setfill(L'0') << std::setw(4) << tileIndex 
+	   << L"_x" << x << L"_y" << y << L"_z" << z;
+	
+	// Save as HDR format
+	std::wstring hdrPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".hdr";
+	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	tile.save(narrowHdrPath.c_str());
+	
+	// Save as raw binary
+	std::wstring rawPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".raw";
+	std::wstring metaPath = modelOutputPath + L"\\tiles\\" + ss.str() + L"_meta.txt";
+	
+	std::string narrowRawPath(rawPath.begin(), rawPath.end());
+	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
+	
+	// Save raw data
+	std::ofstream rawFile(narrowRawPath, std::ios::binary);
+	rawFile.write(reinterpret_cast<const char*>(tile.data()), tile.size() * sizeof(float));
+	rawFile.close();
+	
+	// Save metadata
+	std::ofstream metaFile(narrowMetaPath);
+	metaFile << "dtype: float32" << std::endl;
+	metaFile << "shape: (" << tile.spectrum() << ", " << tile.depth() << ", " << tile.height() << ", " << tile.width() << ")" << std::endl;
+	metaFile << "order: C" << std::endl;
+	metaFile << "position: (" << x << ", " << y << ", " << z << ")" << std::endl;
+	metaFile << "tile_index: " << tileIndex << std::endl;
+	metaFile.close();
+	
+	if (tileIndex % 10 == 0) {  // Log every 10th tile to reduce output
+		std::cout << "[DEBUG] Saved tile " << tileIndex << endl;
+	}
 }
 
 

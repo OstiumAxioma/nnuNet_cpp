@@ -72,6 +72,15 @@ DentalCbctSegAI_API AI_INT       DentalCbctSegAI_Infer(AI_HANDLE AI_Hdl, AI_Data
 //DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData, AI_INT &totalToothNumber, AI_INT &upperToothNumber, AI_INT &lowerToothNumber);
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData);
 
+// �����׶��������·������Ҫ���������������ļ���
+// preprocessPath: Ԥ�������·��
+// modelOutputPath: ģ��ԭʼ����·��
+// postprocessPath: ����������·��
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetOutputPaths(AI_HANDLE AI_Hdl, 
+                                                                 AI_STRING preprocessPath, 
+                                                                 AI_STRING modelOutputPath, 
+                                                                 AI_STRING postprocessPath);
+
 // �ͷ���Դ
 DentalCbctSegAI_API AI_VOID      DentalCbctSegAI_ReleseObj(AI_HANDLE AI_Hdl);
 

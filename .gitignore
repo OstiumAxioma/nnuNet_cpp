@@ -2,4 +2,5 @@ build/
 img/
 lib/
 model/
-result
+result/
+compare/

@@ -94,3 +94,4 @@ Status codes:
 ## Code Analysis Memories
 
 - 不要使用模型文件名来分析代码，kneeseg_test仅仅是名称，并不以意味着它不能用于牙齿分割或其它分割
+- 不要自己运行任何脚本，要求用户手动运行并粘贴结果

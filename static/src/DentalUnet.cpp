@@ -222,6 +222,18 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 		intensity_std = 0.0001f;
 
 	input_voxel_spacing = { voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth
+	
+	// 读取原始spacing（如果提供了的话）
+	if (srcData->OriginalVoxelSpacingX > 0 && srcData->OriginalVoxelSpacingY > 0 && srcData->OriginalVoxelSpacingZ > 0) {
+		original_voxel_spacing = { srcData->OriginalVoxelSpacingX, srcData->OriginalVoxelSpacingY, srcData->OriginalVoxelSpacingZ };
+		std::cout << "[DEBUG] Original voxel spacing: X=" << srcData->OriginalVoxelSpacingX 
+		          << ", Y=" << srcData->OriginalVoxelSpacingY 
+		          << ", Z=" << srcData->OriginalVoxelSpacingZ << endl;
+	} else {
+		// 如果没有提供原始spacing，则使用当前spacing作为原始spacing
+		original_voxel_spacing = input_voxel_spacing;
+		std::cout << "[DEBUG] No original spacing provided, using current spacing as original" << endl;
+	}
 
 	std::cout << "input_volume intensity_mean: " << intensity_mean << endl;
 	std::cout << "input_volume intensity_std: " << intensity_std << endl;
@@ -239,8 +251,10 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 
 	input_cbct_volume.permute_axes(unetConfig.cimg_transpose_forward);
 	transposed_input_voxel_spacing.clear();
+	transposed_original_voxel_spacing.clear();
 	for (int i = 0; i < 3; ++i) {
 		transposed_input_voxel_spacing.push_back(input_voxel_spacing[unetConfig.transpose_forward[i]]);
+		transposed_original_voxel_spacing.push_back(original_voxel_spacing[unetConfig.transpose_forward[i]]);
 	}
 
 	//apply CNN
@@ -262,22 +276,53 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	}
 
 	// ?????????
-	bool is_volume_scaled = false;
+	// bool is_volume_scaled = false;  // 注释掉条件判断，改为始终缩放
+	bool is_volume_scaled = true;  // 使用与Python相同的逻辑：始终进行缩放
 	////input_voxel_spacing = {voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth 
 	std::vector<int64_t> input_size = { input_volume.width(), input_volume.height(), input_volume.depth()};
 	std::vector<int64_t> output_size;
 	float scaled_factor = 1.f;
+	
+	std::cout << "[DEBUG] Scaling calculation:" << endl;
+	std::cout << "  Current spacing: [" << transposed_input_voxel_spacing[0] 
+	          << ", " << transposed_input_voxel_spacing[1] 
+	          << ", " << transposed_input_voxel_spacing[2] << "]" << endl;
+	std::cout << "  Original spacing: [" << transposed_original_voxel_spacing[0] 
+	          << ", " << transposed_original_voxel_spacing[1] 
+	          << ", " << transposed_original_voxel_spacing[2] << "]" << endl;
+	std::cout << "  Target spacing: [" << config.voxel_spacing[0] 
+	          << ", " << config.voxel_spacing[1] 
+	          << ", " << config.voxel_spacing[2] << "]" << endl;
+	
 	for (int i = 0; i < 3; ++i) {  // ???????????
-		scaled_factor = transposed_input_voxel_spacing[i] / config.voxel_spacing[i];
+		// 使用原始spacing计算缩放因子，与Python保持一致
+		scaled_factor = transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
 		int scaled_sz = std::round(input_size[i] * scaled_factor);
-		if (scaled_factor < 0.9f || scaled_factor > 1.1f || scaled_sz < config.patch_size[i])
-			is_volume_scaled = true;
+		
+		// 注释掉原有的条件判断逻辑，保留以供参考
+		// if (scaled_factor < 0.9f || scaled_factor > 1.1f || scaled_sz < config.patch_size[i])
+		//     is_volume_scaled = true;
 
 		if (scaled_sz < config.patch_size[i])
 			scaled_sz = config.patch_size[i];
 
 		output_size.push_back(static_cast<int64_t>(scaled_sz));
+		
+		// 输出每个轴的缩放信息
+		std::cout << "  Axis " << i << ":" << endl;
+		std::cout << "    original_spacing: " << transposed_original_voxel_spacing[i] << endl;
+		std::cout << "    current_spacing: " << transposed_input_voxel_spacing[i] << endl;
+		std::cout << "    target_spacing: " << config.voxel_spacing[i] << endl;
+		std::cout << "    scaled_factor: " << scaled_factor << " (" << transposed_original_voxel_spacing[i] 
+		          << " / " << config.voxel_spacing[i] << ")" << endl;
+		std::cout << "    size: " << input_size[i] << " -> " << scaled_sz << endl;
 	}
+
+	std::cout << "[DEBUG] Original size: " << input_size[0] << "x" << input_size[1] << "x" << input_size[2] << endl;
+	std::cout << "[DEBUG] Scaled size: " << output_size[0] << "x" << output_size[1] << "x" << output_size[2] << endl;
+	std::cout << "[DEBUG] Scale factors: " << transposed_original_voxel_spacing[0]/config.voxel_spacing[0] 
+	          << ", " << transposed_original_voxel_spacing[1]/config.voxel_spacing[1] 
+	          << ", " << transposed_original_voxel_spacing[2]/config.voxel_spacing[2] << endl;
 
 	CImg<float> scaled_input_volume;
 	if (is_volume_scaled)
@@ -439,26 +484,32 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	// x Image width, y Image height, z Image depth
 	float step_size_ratio = config.step_size_ratio;
 	float actualStepSize[3];
-	int X_num_steps = (int)ceil(float(width - config.patch_size[0]) / (config.patch_size[0] * step_size_ratio)); //X
-	if (X_num_steps > 1)
-		actualStepSize[0] = float(width - config.patch_size[0]) / (X_num_steps - 1);
-	else
-		actualStepSize[0] = 999999.f;
+	
+	// 使用与Python nnUNet相同的tile计算逻辑
+	// 直接计算步长：step = patch_size * step_size_ratio
+	actualStepSize[0] = config.patch_size[0] * step_size_ratio;
+	actualStepSize[1] = config.patch_size[1] * step_size_ratio;
+	actualStepSize[2] = config.patch_size[2] * step_size_ratio;
+	
+	// 计算步数：确保至少有1步，即使维度小于patch size
+	int X_num_steps = std::max(1, (int)ceil(float(width - config.patch_size[0]) / actualStepSize[0]) + 1);
+	int Y_num_steps = std::max(1, (int)ceil(float(height - config.patch_size[1]) / actualStepSize[1]) + 1);
+	int Z_num_steps = std::max(1, (int)ceil(float(depth - config.patch_size[2]) / actualStepSize[2]) + 1);
+	
+	// 当维度小于patch size时，调整步数为1
+	if (width <= config.patch_size[0]) X_num_steps = 1;
+	if (height <= config.patch_size[1]) Y_num_steps = 1;
+	if (depth <= config.patch_size[2]) Z_num_steps = 1;
 
-	int Y_num_steps = (int)ceil(float(height - config.patch_size[1]) / (config.patch_size[1] * step_size_ratio)); //Y
-	if (Y_num_steps > 1)
-		actualStepSize[1] = float(height - config.patch_size[1]) / (Y_num_steps - 1);
-	else
-		actualStepSize[1] = 999999.f;
-
-	int Z_num_steps = (int)ceil(float(depth - config.patch_size[2]) / (config.patch_size[2] * step_size_ratio)); //Y
-	if (Z_num_steps > 1)
-		actualStepSize[2] = float(depth - config.patch_size[2]) / (Z_num_steps - 1);
-	else
-		actualStepSize[2] = 999999.f;
-
-	if (NETDEBUG_FLAG)
-		std::cout << "Number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
+	if (NETDEBUG_FLAG) {
+		std::cout << "[DEBUG] Tile calculation:" << endl;
+		std::cout << "  Volume dimensions: " << width << "x" << height << "x" << depth << endl;
+		std::cout << "  Patch size: " << config.patch_size[0] << "x" << config.patch_size[1] << "x" << config.patch_size[2] << endl;
+		std::cout << "  Step size ratio: " << step_size_ratio << endl;
+		std::cout << "  Actual step sizes: X=" << actualStepSize[0] << ", Y=" << actualStepSize[1] << ", Z=" << actualStepSize[2] << endl;
+		std::cout << "  Number of steps: X=" << X_num_steps << ", Y=" << Y_num_steps << ", Z=" << Z_num_steps << endl;
+		std::cout << "  Total number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
+	}
 
 	//?
 	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
@@ -478,16 +529,31 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	for (int sz = 0; sz < Z_num_steps; sz++)
 	{
 		int lb_z = (int)std::round(sz * actualStepSize[2]);
+		// 确保不超出边界
+		if (lb_z + config.patch_size[2] > depth) {
+			lb_z = depth - config.patch_size[2];
+		}
+		lb_z = std::max(0, lb_z);
 		int ub_z = lb_z + config.patch_size[2] - 1;
 
 		for (int sy = 0; sy < Y_num_steps; sy++)
 		{
 			int lb_y = (int)std::round(sy * actualStepSize[1]);
+			// 确保不超出边界
+			if (lb_y + config.patch_size[1] > height) {
+				lb_y = height - config.patch_size[1];
+			}
+			lb_y = std::max(0, lb_y);
 			int ub_y = lb_y + config.patch_size[1] - 1;
 
 			for (int sx = 0; sx < X_num_steps; sx++)
 			{
 				int lb_x = (int)std::round(sx * actualStepSize[0]);
+				// 确保不超出边界
+				if (lb_x + config.patch_size[0] > width) {
+					lb_x = width - config.patch_size[0];
+				}
+				lb_x = std::max(0, lb_x);
 				int ub_x = lb_x + config.patch_size[0] - 1;
 
 				patch_count += 1;
@@ -495,13 +561,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					std::cout << "current tile#: " << patch_count << endl;
 
 				std::cout << "[DEBUG] Patch bounds - X: [" << lb_x << ", " << ub_x << "], Y: [" << lb_y << ", " << ub_y << "], Z: [" << lb_z << ", " << ub_z << "]" << endl;
-				
-				// Validate bounds
-				if (ub_x >= width || ub_y >= height || ub_z >= depth) {
-					std::cerr << "[ERROR] Patch bounds exceed volume dimensions!" << endl;
-					std::cerr << "Volume dimensions: " << width << "x" << height << "x" << depth << endl;
-					return DentalCbctSegAI_STATUS_FAIED;
-				}
 
 				CImg<float> input_patch;
 				try {

@@ -3,27 +3,27 @@
 
 
 // ////////////////////////////////////////////////////////////////////////////
-// ÎÄ¼þ£ºDentalCbctSegAI_API.h
-// ×÷Õß£ºÑôÎ¬
-// ËµÃ÷£º¶¨Òå ¿ÚÇ»CBCT½á¹¹·Ö¸î ½Ó¿Ú
+// ï¿½Ä¼ï¿½ï¿½ï¿½DentalCbctSegAI_API.h
+// ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Î¬
+// Ëµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç»CBCTï¿½á¹¹ï¿½Ö¸ï¿½ ï¿½Ó¿ï¿½
 //
-// ´´½¨ÈÕÆÚ£º2025-4-30
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½2025-4-30
 
 // ////////////////////////////////////////////////////////////////////////////
 
 #define DentalCbctSegAI_API  extern "C" __declspec(dllexport)
 
 
-#define DentalCbctSegAI_STATUS_SUCCESS          0   // ³É¹¦
-#define DentalCbctSegAI_STATUS_HANDLE_NULL      1   // ¿Õ¾ä±ú£¬ÇëÊ×ÏÈµ÷ÓÃ DentalCbctSegAI_CreateObj() º¯Êý´´½¨¾ä±ú
-#define DentalCbctSegAI_STATUS_VOLUME_SMALL     2   // ÊäÈëÌåÊý¾Ý¹ýÐ¡
-#define DentalCbctSegAI_STATUS_VOLUME_LARGE     3   // ÊäÈëÌåÊý¾Ý¹ý´ó
-#define DentalCbctSegAI_STATUS_CROP_FAIED       4   // ¶¨Î»ÑÀ³ÝÇøÓòÊ§°Ü
-#define DentalCbctSegAI_STATUS_FAIED            5   // ·Ö¸îÑÀ³ÝÊ§°Ü
-#define DentalCbctSegAI_LOADING_FAIED           6   // ÔØÈëAIÄ£ÐÍÊý¾ÝÊ§°Ü
+#define DentalCbctSegAI_STATUS_SUCCESS          0   // ï¿½É¹ï¿½
+#define DentalCbctSegAI_STATUS_HANDLE_NULL      1   // ï¿½Õ¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Èµï¿½ï¿½ï¿½ DentalCbctSegAI_CreateObj() ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+#define DentalCbctSegAI_STATUS_VOLUME_SMALL     2   // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¹ï¿½Ð¡
+#define DentalCbctSegAI_STATUS_VOLUME_LARGE     3   // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý¹ï¿½ï¿½ï¿½
+#define DentalCbctSegAI_STATUS_CROP_FAIED       4   // ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½
+#define DentalCbctSegAI_STATUS_FAIED            5   // ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½
+#define DentalCbctSegAI_LOADING_FAIED           6   // ï¿½ï¿½ï¿½ï¿½AIÄ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½
 
 // --------------------------------------------------------------------
-//            Ô¤¶¨ÒåÀàÐÍ
+//            Ô¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 // --------------------------------------------------------------------
 typedef unsigned char    AI_UCHAR;
 typedef unsigned short   AI_USHORT;
@@ -35,44 +35,48 @@ typedef void*            AI_HANDLE;
 typedef wchar_t*         AI_STRING;
 
 
-//ÌåÊý¾Ý½á¹¹
+//ï¿½ï¿½ï¿½ï¿½ï¿½Ý½á¹¹
 typedef struct
 {
-	AI_SHORT    *ptr_Data;      // Êý¾ÝÖ¸Õë
-	AI_INT       Width;         // ºá¶ÏÃæ¿í
-	AI_INT       Height;        // ºá¶ÏÃæ¸ß
-	AI_INT       Depth;         // ÖáÏò²ãÊý
-	AI_FLOAT     VoxelSpacing;  // ÌåËØ´óÐ¡£¬µ¥Î»£ºmm
-	AI_FLOAT     VoxelSpacingX;  // ÌåËØ´óÐ¡£¬µ¥Î»£ºmm
-	AI_FLOAT     VoxelSpacingY;  // ÌåËØ´óÐ¡£¬µ¥Î»£ºmm
-	AI_FLOAT     VoxelSpacingZ;  // ÌåËØ´óÐ¡£¬µ¥Î»£ºmm
+	AI_SHORT    *ptr_Data;      // ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½
+	AI_INT       Width;         // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	AI_INT       Height;        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	AI_INT       Depth;         // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	AI_FLOAT     VoxelSpacing;  // ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
+	AI_FLOAT     VoxelSpacingX;  // ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
+	AI_FLOAT     VoxelSpacingY;  // ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
+	AI_FLOAT     VoxelSpacingZ;  // ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
+	// ï¿½ï¿½ï¿½Ó£ï¿½Ô­Ê¼spacingï¿½Ö¶Î£ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½spacingï¿½ï¿½
+	AI_FLOAT     OriginalVoxelSpacingX;  // Ô­Ê¼ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
+	AI_FLOAT     OriginalVoxelSpacingY;  // Ô­Ê¼ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
+	AI_FLOAT     OriginalVoxelSpacingZ;  // Ô­Ê¼ï¿½ï¿½ï¿½Ø´ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½mm
 } AI_DataInfo;
 
 
-// ´´½¨¾ä±ú
-// ½øÐÐ³õÊ¼»¯£¨¶ÁÈ¡Ëã·¨ÐèÒªµÄ²ÎÊýÓëÄ£°å£©
-// ³õÊ¼»¯Ê§°Ü£º·µ»ØNULL£»·Ç¿Õ±íÊ¾³õÊ¼»¯³É¹¦
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½Ð³ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ã·¨ï¿½ï¿½Òªï¿½Ä²ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½å£©
+// ï¿½ï¿½Ê¼ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½NULLï¿½ï¿½ï¿½Ç¿Õ±ï¿½Ê¾ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½É¹ï¿½
 DentalCbctSegAI_API AI_HANDLE    DentalCbctSegAI_CreateObj();
 
-//ÉèÖÃ·Ö¸îÄ£ÐÍÎÄ¼þÂ·¾¶
+//ï¿½ï¿½ï¿½Ã·Ö¸ï¿½Ä£ï¿½ï¿½ï¿½Ä¼ï¿½Â·ï¿½ï¿½
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetModelPath(AI_HANDLE AI_Hdl, AI_STRING fn);
 
-//ÉèÖÃ»¬¶¯´°²½³¤±ÈÀý
+//ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetTileStepRatio(AI_HANDLE AI_Hdl, AI_FLOAT ratio);
 
-// ·Ö¸î¿ÚÇ»CBCT£¨CPU¼ÆËã´óÔ¼1·ÖÖÓ£©
-// AI_Hdl: ³õÊ¼»¯²úÉúµÄ¾ä±ú£»
-// srcData: ÊäÈë¿ÚÇ»CBCTÍ¼ÏñÊý¾Ý
+// ï¿½Ö¸ï¿½ï¿½Ç»CBCTï¿½ï¿½CPUï¿½ï¿½ï¿½ï¿½ï¿½Ô¼1ï¿½ï¿½ï¿½Ó£ï¿½
+// AI_Hdl: ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¾ï¿½ï¿½ï¿½ï¿½
+// srcData: ï¿½ï¿½ï¿½ï¿½ï¿½Ç»CBCTÍ¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_Infer(AI_HANDLE AI_Hdl, AI_DataInfo *srcData);
 
-// »ñÈ¡·Ö¸î½á¹û
-// AI_Hdl: ³õÊ¼»¯²úÉúµÄ¾ä±ú£»
-//·Ö¸îMask±êÇ©ËµÃ÷£º
-//1£ºÏÂò¢¹Ç£»2£ºÉÏò¢¹Ç£»3£ºÉÏò¢ñ¼£»4£ºÏÂò¢Éñ¾­¹Ü£»5£ºÉÏÑÀ£»6£ºÏÂÑÀ£» 0£º±³¾°
+// ï¿½ï¿½È¡ï¿½Ö¸ï¿½ï¿½ï¿½
+// AI_Hdl: ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¾ï¿½ï¿½ï¿½ï¿½
+//ï¿½Ö¸ï¿½Maskï¿½ï¿½Ç©Ëµï¿½ï¿½ï¿½ï¿½
+//1ï¿½ï¿½ï¿½ï¿½ï¿½Ç£ï¿½2ï¿½ï¿½ï¿½ï¿½ï¿½Ç£ï¿½3ï¿½ï¿½ï¿½ï¿½ï¿½ñ¼£»4ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ñ¾­¹Ü£ï¿½5ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½6ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 0ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 //DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData, AI_INT &totalToothNumber, AI_INT &upperToothNumber, AI_INT &lowerToothNumber);
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData);
 
-// ÊÍ·Å×ÊÔ´
+// ï¿½Í·ï¿½ï¿½ï¿½Ô´
 DentalCbctSegAI_API AI_VOID      DentalCbctSegAI_ReleseObj(AI_HANDLE AI_Hdl);
 
 #endif

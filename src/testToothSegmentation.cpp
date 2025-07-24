@@ -178,6 +178,10 @@ int main()
 	srcData->VoxelSpacingX = VoxelSpacingX;
 	srcData->VoxelSpacingY = VoxelSpacingY;
 	srcData->VoxelSpacingZ = VoxelSpacingZ;
+	// 设置原始spacing（从HDR文件读取的真实值）
+	srcData->OriginalVoxelSpacingX = real_voxel_size[0];
+	srcData->OriginalVoxelSpacingY = real_voxel_size[1];
+	srcData->OriginalVoxelSpacingZ = real_voxel_size[2];
 	srcData->ptr_Data = ptrCbctData; //CBCT数据块指针
 
 	//初始化牙齿分割输出数据信息

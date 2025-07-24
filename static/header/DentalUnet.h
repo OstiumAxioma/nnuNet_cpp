@@ -90,6 +90,9 @@ private:
 
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
+	// 新增：保存原始spacing（从文件读取的真实物理spacing）
+	std::vector<float> original_voxel_spacing;
+	std::vector<float> transposed_original_voxel_spacing;
 
 	//������ָ�������άMask
 	CImg<float> predicted_output_prob;

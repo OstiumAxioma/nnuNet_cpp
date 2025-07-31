@@ -15,6 +15,11 @@
 
 #include "DentalCbctSegAI_API.h"
 
+// ITK headers for image I/O
+#include <itkImage.h>
+#include <itkImageFileWriter.h>
+#include <itkImageRegionIterator.h>
+
 using namespace std;
 using namespace cimg_library;
 
@@ -93,6 +98,23 @@ private:
 	// 新增：保存原始spacing（从文件读取的真实物理spacing）
 	std::vector<float> original_voxel_spacing;
 	std::vector<float> transposed_original_voxel_spacing;
+	
+	// 新增：保存图像元数据（origin, spacing, direction）
+	struct ImageMetadata {
+		double origin[3];
+		double spacing[3];
+		double direction[9];  // 3x3 direction matrix stored as 1D array
+		
+		ImageMetadata() {
+			// 默认值
+			origin[0] = origin[1] = origin[2] = 0.0;
+			spacing[0] = spacing[1] = spacing[2] = 1.0;
+			// 默认方向为单位矩阵
+			direction[0] = direction[4] = direction[8] = 1.0;
+			direction[1] = direction[2] = direction[3] = 0.0;
+			direction[5] = direction[6] = direction[7] = 0.0;
+		}
+	} imageMetadata;
 
 	//������ָ�������άMask
 	CImg<float> predicted_output_prob;

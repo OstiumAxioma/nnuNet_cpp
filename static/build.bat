@@ -16,7 +16,7 @@ if exist CMakeFiles rmdir /s /q CMakeFiles
 
 :: 配置项目
 echo Configuring DLL project...
-cmake .. -G "Visual Studio 17 2022" -A x64
+cmake .. -G "Visual Studio 17 2022" -A x64 -DITK_DIR=D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4
 
 if %ERRORLEVEL% NEQ 0 (
     echo CMake configuration failed!
@@ -24,7 +24,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: 编译项目（Release和Debug两个版本）
+:: 编译项目（只编译Release版本，因为ITK是Release版本）
 echo.
 echo Building DLL (Release mode)...
 cmake --build . --config Release
@@ -35,15 +35,16 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo.
-echo Building DLL (Debug mode)...
-cmake --build . --config Debug
-
-if %ERRORLEVEL% NEQ 0 (
-    echo Debug build failed!
-    pause
-    exit /b 1
-)
+:: 注释掉Debug编译，因为ITK库是Release版本
+:: echo.
+:: echo Building DLL (Debug mode)...
+:: cmake --build . --config Debug
+:: 
+:: if %ERRORLEVEL% NEQ 0 (
+::     echo Debug build failed!
+::     pause
+::     exit /b 1
+:: )
 
 cd ..
 

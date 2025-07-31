@@ -52,6 +52,12 @@
 #define cimg_display_type 2
 #include "..\lib\CImg\CImg.h"
 
+//ITK用于读写医学图像并保留origin信息
+#include <itkImage.h>
+#include <itkImageFileReader.h>
+#include <itkImageFileWriter.h>
+#include <itkImageRegionIterator.h>
+
 using namespace std;
 using namespace cimg_library;
 
@@ -138,17 +144,56 @@ int main()
 		
 		//load raw volume data: 左右左前右后；头脚右左，上下头脚，头顶脚底
 		std::string inputHdrPath = "..\\..\\..\\img\\Series_5_Acq_2_0000.hdr";
-		std::cout << "正在加载HDR图像文件..." << std::endl;
+		std::cout << "正在使用ITK加载HDR图像文件..." << std::endl;
 		std::cout << "文件路径: " << inputHdrPath << std::endl;
-		CImg<short> inputCbctVolume;
+		
+		// ITK图像类型定义
+		using PixelType = short;
+		using ImageType = itk::Image<PixelType, 3>;
+		using ReaderType = itk::ImageFileReader<ImageType>;
+		
+		// 使用ITK读取图像
+		ReaderType::Pointer reader = ReaderType::New();
+		reader->SetFileName(inputHdrPath);
+		
+		ImageType::Pointer itkImage;
+		try {
+			reader->Update();
+			itkImage = reader->GetOutput();
+			std::cout << "ITK图像加载成功" << std::endl;
+		} catch (itk::ExceptionObject& e) {
+			std::cerr << "ITK读取图像失败: " << e << std::endl;
+			return -1;
+		}
+		
+		// 获取图像元数据
+		ImageType::SpacingType spacing = itkImage->GetSpacing();
+		ImageType::PointType origin = itkImage->GetOrigin();
+		ImageType::DirectionType direction = itkImage->GetDirection();
+		ImageType::RegionType region = itkImage->GetLargestPossibleRegion();
+		ImageType::SizeType size = region.GetSize();
 		
 		// 从HDR文件读取真实的voxel spacing
-		float real_voxel_size[3] = {0, 0, 0};
-		inputCbctVolume.load_analyze(inputHdrPath.c_str(), real_voxel_size);
-		std::cout << "HDR文件加载成功" << std::endl;
+		float real_voxel_size[3] = {
+			static_cast<float>(spacing[0]),
+			static_cast<float>(spacing[1]),
+			static_cast<float>(spacing[2])
+		};
+		
 		std::cout << "原始图像真实spacing: X=" << real_voxel_size[0] 
 		         << ", Y=" << real_voxel_size[1] 
 		         << ", Z=" << real_voxel_size[2] << " mm" << std::endl;
+		std::cout << "原始图像origin: X=" << origin[0]
+		         << ", Y=" << origin[1]
+		         << ", Z=" << origin[2] << " mm" << std::endl;
+		
+		// 将ITK图像数据复制到CImg
+		CImg<short> inputCbctVolume(size[0], size[1], size[2], 1, 0);
+		itk::ImageRegionIterator<ImageType> it(itkImage, region);
+		short* cimg_data = inputCbctVolume.data();
+		for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
+			*cimg_data++ = it.Get();
+		}
 
 	float VoxelSpacing  = 1.0f; //unit: mm  0.3
 	float VoxelSpacingX = 0.5810545086860657f; //unit: mm  0.3
@@ -182,6 +227,10 @@ int main()
 	srcData->OriginalVoxelSpacingX = real_voxel_size[0];
 	srcData->OriginalVoxelSpacingY = real_voxel_size[1];
 	srcData->OriginalVoxelSpacingZ = real_voxel_size[2];
+	// 设置origin信息
+	srcData->OriginX = origin[0];
+	srcData->OriginY = origin[1];
+	srcData->OriginZ = origin[2];
 	srcData->ptr_Data = ptrCbctData; //CBCT数据块指针
 
 	//初始化牙齿分割输出数据信息
@@ -307,9 +356,55 @@ int main()
 	
 	std::string resultPath = resultDir + "\\finalLabelMask.hdr";
 	
-	// 重要：保存时使用原始图像的真实spacing，而不是归一化的spacing
-	// 这样结果就能与原始图像在相同的物理空间中对齐
-	toothLabelMask.save_analyze(resultPath.c_str(), real_voxel_size);
+	// 使用ITK保存结果，保留origin信息
+	std::cout << "\n使用ITK保存分割结果..." << std::endl;
+	
+	// 创建输出ITK图像
+	using WriterType = itk::ImageFileWriter<ImageType>;
+	ImageType::Pointer outputImage = ImageType::New();
+	
+	// 设置图像属性
+	outputImage->SetRegions(region);
+	outputImage->SetSpacing(spacing);
+	outputImage->SetOrigin(origin);  // 使用输入图像的origin
+	outputImage->SetDirection(direction);  // 使用输入图像的direction
+	outputImage->Allocate();
+	
+	// 如果toothSegData中有更新的origin信息，使用它
+	if (toothSegData->OriginX != 0 || toothSegData->OriginY != 0 || toothSegData->OriginZ != 0) {
+		ImageType::PointType outputOrigin;
+		outputOrigin[0] = toothSegData->OriginX;
+		outputOrigin[1] = toothSegData->OriginY;
+		outputOrigin[2] = toothSegData->OriginZ;
+		outputImage->SetOrigin(outputOrigin);
+		std::cout << "使用分割结果的origin: X=" << outputOrigin[0]
+		         << ", Y=" << outputOrigin[1]
+		         << ", Z=" << outputOrigin[2] << " mm" << std::endl;
+	} else {
+		std::cout << "使用原始图像的origin: X=" << origin[0]
+		         << ", Y=" << origin[1]
+		         << ", Z=" << origin[2] << " mm" << std::endl;
+	}
+	
+	// 复制分割结果到ITK图像
+	itk::ImageRegionIterator<ImageType> outIt(outputImage, region);
+	short* resultPtr = toothLabelMask.data();
+	for (outIt.GoToBegin(); !outIt.IsAtEnd(); ++outIt) {
+		outIt.Set(*resultPtr++);
+	}
+	
+	// 使用ITK写入文件
+	WriterType::Pointer writer = WriterType::New();
+	writer->SetFileName(resultPath);
+	writer->SetInput(outputImage);
+	
+	try {
+		writer->Update();
+		std::cout << "分割结果保存成功: " << resultPath << std::endl;
+	} catch (itk::ExceptionObject& e) {
+		std::cerr << "ITK保存图像失败: " << e << std::endl;
+		return -1;
+	}
 
 		std::cout << "\n程序执行成功完成!" << std::endl;
 		

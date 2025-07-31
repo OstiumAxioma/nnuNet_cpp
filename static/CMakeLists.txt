@@ -5,6 +5,13 @@ project(DentalCbctOnnxSegDLL CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 设置ITK目录
+set(ITK_DIR "D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4")
+
+# 查找ITK
+find_package(ITK REQUIRED)
+include(${ITK_USE_FILE})
+
 # 设置输出目录
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -58,6 +65,7 @@ target_link_libraries(DentalCbctOnnxSegDLL PRIVATE
     ${ONNXRUNTIME_LIB}
     ${ONNXRUNTIME_PROVIDERS_SHARED_LIB}
     ${ONNXRUNTIME_PROVIDERS_CUDA_LIB}
+    ${ITK_LIBRARIES}
 )
 
 # Windows特定设置

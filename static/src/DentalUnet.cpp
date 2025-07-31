@@ -189,6 +189,20 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	
 	std::cout << "[DEBUG] Input volume dimensions: " << Width0 << "x" << Height0 << "x" << Depth0 << endl;
 	std::cout << "[DEBUG] Voxel spacing: X=" << voxelSpacingX << ", Y=" << voxelSpacingY << ", Z=" << voxelSpacingZ << endl;
+	
+	// 保存origin信息到元数据
+	imageMetadata.origin[0] = srcData->OriginX;
+	imageMetadata.origin[1] = srcData->OriginY;
+	imageMetadata.origin[2] = srcData->OriginZ;
+	
+	// 保存spacing信息到元数据
+	imageMetadata.spacing[0] = voxelSpacingX;
+	imageMetadata.spacing[1] = voxelSpacingY;
+	imageMetadata.spacing[2] = voxelSpacingZ;
+	
+	std::cout << "[DEBUG] Origin: X=" << imageMetadata.origin[0] 
+	         << ", Y=" << imageMetadata.origin[1] 
+	         << ", Z=" << imageMetadata.origin[2] << endl;
 
 	float fovX = float(Width0) * voxelSpacingY;
 	float fovY = float(Height0) * voxelSpacingX;
@@ -793,6 +807,16 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 {
 	long volSize = Width0 * Height0 * Depth0 * sizeof(short);
 	std::memcpy(dstData->ptr_Data, output_seg_mask.data(), volSize);
+	
+	// 将保存的origin信息传回给调用者
+	dstData->OriginX = imageMetadata.origin[0];
+	dstData->OriginY = imageMetadata.origin[1];
+	dstData->OriginZ = imageMetadata.origin[2];
+	
+	// 同时确保spacing信息也正确传回
+	dstData->VoxelSpacingX = imageMetadata.spacing[0];
+	dstData->VoxelSpacingY = imageMetadata.spacing[1];
+	dstData->VoxelSpacingZ = imageMetadata.spacing[2];
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
@@ -802,10 +826,63 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 {
 	if (!saveIntermediateResults || preprocessOutputPath.empty()) return;
 	
-	// Save as HDR format for visualization
+	// Save as HDR format with ITK to preserve origin
 	std::wstring hdrPath = preprocessOutputPath + L"\\" + filename + L".hdr";
 	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
-	data.save(narrowHdrPath.c_str());
+	
+	// Define ITK types
+	using FloatImageType = itk::Image<float, 3>;
+	using WriterType = itk::ImageFileWriter<FloatImageType>;
+	
+	// Create ITK image
+	FloatImageType::Pointer image = FloatImageType::New();
+	
+	// Set image size
+	FloatImageType::SizeType size;
+	size[0] = data.width();
+	size[1] = data.height();
+	size[2] = data.depth();
+	
+	FloatImageType::IndexType start;
+	start.Fill(0);
+	
+	FloatImageType::RegionType region;
+	region.SetSize(size);
+	region.SetIndex(start);
+	
+	image->SetRegions(region);
+	image->Allocate();
+	
+	// Set metadata
+	FloatImageType::PointType origin;
+	origin[0] = imageMetadata.origin[0];
+	origin[1] = imageMetadata.origin[1];
+	origin[2] = imageMetadata.origin[2];
+	image->SetOrigin(origin);
+	
+	FloatImageType::SpacingType spacing;
+	spacing[0] = imageMetadata.spacing[0];
+	spacing[1] = imageMetadata.spacing[1];
+	spacing[2] = imageMetadata.spacing[2];
+	image->SetSpacing(spacing);
+	
+	// Copy data
+	itk::ImageRegionIterator<FloatImageType> it(image, region);
+	const float* cimg_data = data.data();
+	for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
+		it.Set(*cimg_data++);
+	}
+	
+	// Write image
+	WriterType::Pointer writer = WriterType::New();
+	writer->SetFileName(narrowHdrPath);
+	writer->SetInput(image);
+	
+	try {
+		writer->Update();
+	} catch (itk::ExceptionObject& e) {
+		std::cerr << "Error saving preprocessed data: " << e << std::endl;
+	}
 	
 	// Save as raw binary for numpy
 	std::wstring rawPath = preprocessOutputPath + L"\\" + filename + L".raw";
@@ -837,10 +914,72 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 {
 	if (!saveIntermediateResults || modelOutputPath.empty()) return;
 	
-	// Save as HDR format for visualization
+	// Save as HDR format with ITK to preserve origin
 	std::wstring hdrPath = modelOutputPath + L"\\" + filename + L".hdr";
 	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
-	data.save(narrowHdrPath.c_str());
+	
+	// Define ITK types
+	using FloatImageType = itk::Image<float, 3>;
+	using WriterType = itk::ImageFileWriter<FloatImageType>;
+	
+	// Note: For multi-channel data, we might need to save each channel separately
+	// For now, save the first channel if it's a probability map
+	CImg<float> dataToSave;
+	if (data.spectrum() > 1) {
+		dataToSave = data.get_channel(0);
+	} else {
+		dataToSave = data;
+	}
+	
+	// Create ITK image
+	FloatImageType::Pointer image = FloatImageType::New();
+	
+	// Set image size
+	FloatImageType::SizeType size;
+	size[0] = dataToSave.width();
+	size[1] = dataToSave.height();
+	size[2] = dataToSave.depth();
+	
+	FloatImageType::IndexType start;
+	start.Fill(0);
+	
+	FloatImageType::RegionType region;
+	region.SetSize(size);
+	region.SetIndex(start);
+	
+	image->SetRegions(region);
+	image->Allocate();
+	
+	// Set metadata
+	FloatImageType::PointType origin;
+	origin[0] = imageMetadata.origin[0];
+	origin[1] = imageMetadata.origin[1];
+	origin[2] = imageMetadata.origin[2];
+	image->SetOrigin(origin);
+	
+	FloatImageType::SpacingType spacing;
+	spacing[0] = imageMetadata.spacing[0];
+	spacing[1] = imageMetadata.spacing[1];
+	spacing[2] = imageMetadata.spacing[2];
+	image->SetSpacing(spacing);
+	
+	// Copy data
+	itk::ImageRegionIterator<FloatImageType> it(image, region);
+	const float* cimg_data = dataToSave.data();
+	for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
+		it.Set(*cimg_data++);
+	}
+	
+	// Write image
+	WriterType::Pointer writer = WriterType::New();
+	writer->SetFileName(narrowHdrPath);
+	writer->SetInput(image);
+	
+	try {
+		writer->Update();
+	} catch (itk::ExceptionObject& e) {
+		std::cerr << "Error saving model output: " << e << std::endl;
+	}
 	
 	// Save as raw binary for numpy
 	std::wstring rawPath = modelOutputPath + L"\\" + filename + L".raw";
@@ -872,10 +1011,63 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 {
 	if (!saveIntermediateResults || postprocessOutputPath.empty()) return;
 	
-	// Save as HDR format for visualization
+	// Save as HDR format with ITK to preserve origin
 	std::wstring hdrPath = postprocessOutputPath + L"\\" + filename + L".hdr";
 	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
-	data.save(narrowHdrPath.c_str());
+	
+	// Define ITK types
+	using ShortImageType = itk::Image<short, 3>;
+	using WriterType = itk::ImageFileWriter<ShortImageType>;
+	
+	// Create ITK image
+	ShortImageType::Pointer image = ShortImageType::New();
+	
+	// Set image size
+	ShortImageType::SizeType size;
+	size[0] = data.width();
+	size[1] = data.height();
+	size[2] = data.depth();
+	
+	ShortImageType::IndexType start;
+	start.Fill(0);
+	
+	ShortImageType::RegionType region;
+	region.SetSize(size);
+	region.SetIndex(start);
+	
+	image->SetRegions(region);
+	image->Allocate();
+	
+	// Set metadata
+	ShortImageType::PointType origin;
+	origin[0] = imageMetadata.origin[0];
+	origin[1] = imageMetadata.origin[1];
+	origin[2] = imageMetadata.origin[2];
+	image->SetOrigin(origin);
+	
+	ShortImageType::SpacingType spacing;
+	spacing[0] = imageMetadata.spacing[0];
+	spacing[1] = imageMetadata.spacing[1];
+	spacing[2] = imageMetadata.spacing[2];
+	image->SetSpacing(spacing);
+	
+	// Copy data
+	itk::ImageRegionIterator<ShortImageType> it(image, region);
+	const short* cimg_data = data.data();
+	for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
+		it.Set(*cimg_data++);
+	}
+	
+	// Write image
+	WriterType::Pointer writer = WriterType::New();
+	writer->SetFileName(narrowHdrPath);
+	writer->SetInput(image);
+	
+	try {
+		writer->Update();
+	} catch (itk::ExceptionObject& e) {
+		std::cerr << "Error saving postprocessed data: " << e << std::endl;
+	}
 	
 	// Save as raw binary for numpy
 	std::wstring rawPath = postprocessOutputPath + L"\\" + filename + L".raw";

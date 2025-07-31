@@ -50,6 +50,10 @@ typedef struct
 	AI_FLOAT     OriginalVoxelSpacingX;  // ԭʼ���ش�С����λ��mm
 	AI_FLOAT     OriginalVoxelSpacingY;  // ԭʼ���ش�С����λ��mm
 	AI_FLOAT     OriginalVoxelSpacingZ;  // ԭʼ���ش�С����λ��mm
+	// ���ӣ�origin�ֶΣ��������ҽѧͼ���ѧԭ��
+	AI_FLOAT     OriginX;  // ԭ��X����
+	AI_FLOAT     OriginY;  // ԭ��Y����
+	AI_FLOAT     OriginZ;  // ԭ��Z����
 } AI_DataInfo;
 
 

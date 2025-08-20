@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 
 // onnx 相关
@@ -64,8 +65,8 @@
 using namespace std;
 using namespace cimg_library;
 
-// 函数：列出目录中的所有文件并让用户选择
-string selectFileFromDirectory(const string& directory, const string& fileType) {
+// 函数：根据扩展名过滤并列出目录中的文件，让用户选择
+string selectFileFromDirectory(const string& directory, const string& fileType, const vector<string>& allowedExtensions) {
     vector<string> files;
     
     try {
@@ -75,10 +76,43 @@ string selectFileFromDirectory(const string& directory, const string& fileType) 
             return "";
         }
         
-        // 遍历目录获取文件
+        // 遍历目录获取文件，并根据扩展名过滤
         for (const auto& entry : filesystem::directory_iterator(directory)) {
             if (entry.is_regular_file()) {
-                files.push_back(entry.path().filename().string());
+                string filename = entry.path().filename().string();
+                string extension = entry.path().extension().string();
+                
+                // 转换为小写进行比较
+                transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+                
+                // 检查文件扩展名是否在允许的列表中
+                bool isAllowed = false;
+                for (const auto& allowedExt : allowedExtensions) {
+                    string lowerAllowedExt = allowedExt;
+                    transform(lowerAllowedExt.begin(), lowerAllowedExt.end(), lowerAllowedExt.begin(), ::tolower);
+                    if (extension == lowerAllowedExt) {
+                        isAllowed = true;
+                        break;
+                    }
+                }
+                
+                // 特殊处理 .nii.gz 文件
+                if (!isAllowed && filename.length() > 7) {
+                    string lastPart = filename.substr(filename.length() - 7);
+                    transform(lastPart.begin(), lastPart.end(), lastPart.begin(), ::tolower);
+                    for (const auto& allowedExt : allowedExtensions) {
+                        string lowerAllowedExt = allowedExt;
+                        transform(lowerAllowedExt.begin(), lowerAllowedExt.end(), lowerAllowedExt.begin(), ::tolower);
+                        if (lastPart == lowerAllowedExt) {
+                            isAllowed = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (isAllowed) {
+                    files.push_back(filename);
+                }
             }
         }
         
@@ -196,7 +230,8 @@ int main()
 		
 		//===== 用户选择模型文件 =====
 		cout << "======= Model File Selection =======" << endl;
-		string modelPath = selectFileFromDirectory("..\\..\\..\\model", "model");
+		vector<string> modelExtensions = {".onnx"};
+		string modelPath = selectFileFromDirectory("..\\..\\..\\model", "model", modelExtensions);
 		if (modelPath.empty()) {
 			cout << "Error: Failed to select model file, program exit!" << endl;
 			system("pause");
@@ -206,7 +241,8 @@ int main()
 		//===== 用户选择输入数据文件 =====
 		cout << "\n======= Input Data File Selection =======" << endl;
 		//load raw volume data: 左右左前右后；头脚右左，上下头脚，头顶脚底
-		std::string inputHdrPath = selectFileFromDirectory("..\\..\\..\\img", "input data");
+		vector<string> inputExtensions = {".hdr", ".nii", ".nii.gz"};
+		std::string inputHdrPath = selectFileFromDirectory("..\\..\\..\\img", "input data", inputExtensions);
 		if (inputHdrPath.empty()) {
 			cout << "Error: Failed to select input data file, program exit!" << endl;
 			system("pause");

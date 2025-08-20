@@ -11,6 +11,9 @@
 #include <clocale>
 #include <cstdlib>
 #include <direct.h>  // for _mkdir
+#include <filesystem>
+#include <vector>
+#include <string>
 
 
 // onnx 相关
@@ -60,6 +63,55 @@
 
 using namespace std;
 using namespace cimg_library;
+
+// 函数：列出目录中的所有文件并让用户选择
+string selectFileFromDirectory(const string& directory, const string& fileType) {
+    vector<string> files;
+    
+    try {
+        // 检查目录是否存在
+        if (!filesystem::exists(directory)) {
+            cout << "Error: Directory " << directory << " does not exist!" << endl;
+            return "";
+        }
+        
+        // 遍历目录获取文件
+        for (const auto& entry : filesystem::directory_iterator(directory)) {
+            if (entry.is_regular_file()) {
+                files.push_back(entry.path().filename().string());
+            }
+        }
+        
+        if (files.empty()) {
+            cout << "Error: No files found in directory " << directory << "!" << endl;
+            return "";
+        }
+        
+        // 显示文件列表
+        cout << "\nFound " << fileType << " files in directory " << directory << ":" << endl;
+        for (size_t i = 0; i < files.size(); ++i) {
+            cout << "[" << (i + 1) << "] " << files[i] << endl;
+        }
+        
+        // 用户选择
+        int choice;
+        cout << "\nPlease select file number (1-" << files.size() << "): ";
+        cin >> choice;
+        
+        if (choice < 1 || choice > static_cast<int>(files.size())) {
+            cout << "Error: Invalid selection!" << endl;
+            return "";
+        }
+        
+        string selectedFile = directory + "\\\\" + files[choice - 1];
+        cout << "Selected file: " << selectedFile << endl;
+        return selectedFile;
+        
+    } catch (const filesystem::filesystem_error& e) {
+        cout << "Filesystem error: " << e.what() << endl;
+        return "";
+    }
+}
 
 // 信号处理函数
 void SignalHandler(int signal) {
@@ -142,8 +194,24 @@ int main()
 	try {
 		std::cout << "程序开始运行..." << std::endl;
 		
+		//===== 用户选择模型文件 =====
+		cout << "======= Model File Selection =======" << endl;
+		string modelPath = selectFileFromDirectory("..\\..\\..\\model", "model");
+		if (modelPath.empty()) {
+			cout << "Error: Failed to select model file, program exit!" << endl;
+			system("pause");
+			return -1;
+		}
+		
+		//===== 用户选择输入数据文件 =====
+		cout << "\n======= Input Data File Selection =======" << endl;
 		//load raw volume data: 左右左前右后；头脚右左，上下头脚，头顶脚底
-		std::string inputHdrPath = "..\\..\\..\\img\\Series_5_Acq_2_0000.hdr";
+		std::string inputHdrPath = selectFileFromDirectory("..\\..\\..\\img", "input data");
+		if (inputHdrPath.empty()) {
+			cout << "Error: Failed to select input data file, program exit!" << endl;
+			system("pause");
+			return -1;
+		}
 		std::cout << "正在使用ITK加载HDR图像文件..." << std::endl;
 		std::cout << "文件路径: " << inputHdrPath << std::endl;
 		
@@ -259,7 +327,6 @@ int main()
 	}
 	std::cout << "Model initialized successfully" << std::endl;
 
-	std::string modelPath = "..\\..\\..\\model\\kneeseg_test.onnx";
 	std::cout << "Setting model path..." << std::endl;
 	std::cout << "模型文件: " << modelPath << std::endl;
 	// 转换为宽字符串

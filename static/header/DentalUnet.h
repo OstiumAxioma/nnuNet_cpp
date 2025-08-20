@@ -67,6 +67,18 @@ public:
 	void    setModelFns(const wchar_t* model_fn);
 
 	void    setStepSizeRatio(float ratio);
+	
+	// 新增：参数设置接口
+	void    setPatchSize(int64_t x, int64_t y, int64_t z);
+	void    setNumClasses(int classes);
+	void    setInputChannels(int channels);
+	void    setTargetSpacing(float x, float y, float z);
+	void    setTransposeSettings(int forward_x, int forward_y, int forward_z, 
+	                           int backward_x, int backward_y, int backward_z);
+	void    setNormalizationType(const char* type);
+	void    setIntensityProperties(float mean, float std, float min_val, float max_val,
+	                             float percentile_00_5, float percentile_99_5);
+	void    setUseMirroring(bool use_mirroring);
 
 	AI_INT  performInference(AI_DataInfo *srcData); //ִ�зָ�����
 

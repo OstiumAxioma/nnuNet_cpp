@@ -33,6 +33,7 @@ typedef float            AI_FLOAT;
 typedef void             AI_VOID;
 typedef void*            AI_HANDLE;
 typedef wchar_t*         AI_STRING;
+typedef int              AI_BOOL;
 
 
 //�����ݽṹ
@@ -80,14 +81,26 @@ DentalCbctSegAI_API AI_INT       DentalCbctSegAI_Infer(AI_HANDLE AI_Hdl, AI_Data
 //DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData, AI_INT &totalToothNumber, AI_INT &upperToothNumber, AI_INT &lowerToothNumber);
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData);
 
-// �����׶��������·������Ҫ���������������ļ���
-// preprocessPath: Ԥ�������·��
-// modelOutputPath: ģ��ԭʼ����·��
-// postprocessPath: ����������·��
+// ���ӣ��趨������·������Ҫ���������������ļ���
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetOutputPaths(AI_HANDLE AI_Hdl, 
                                                                  AI_STRING preprocessPath, 
                                                                  AI_STRING modelOutputPath, 
                                                                  AI_STRING postprocessPath);
+
+// ���Ӳ���������ؽӿ�
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetPatchSize(AI_HANDLE AI_Hdl, AI_INT x, AI_INT y, AI_INT z);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetNumClasses(AI_HANDLE AI_Hdl, AI_INT classes);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetInputChannels(AI_HANDLE AI_Hdl, AI_INT channels);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetTargetSpacing(AI_HANDLE AI_Hdl, AI_FLOAT x, AI_FLOAT y, AI_FLOAT z);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetTransposeSettings(AI_HANDLE AI_Hdl, 
+                                                                       AI_INT forward_x, AI_INT forward_y, AI_INT forward_z,
+                                                                       AI_INT backward_x, AI_INT backward_y, AI_INT backward_z);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetNormalizationType(AI_HANDLE AI_Hdl, const char* type);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetIntensityProperties(AI_HANDLE AI_Hdl, 
+                                                                         AI_FLOAT mean, AI_FLOAT std, 
+                                                                         AI_FLOAT min_val, AI_FLOAT max_val,
+                                                                         AI_FLOAT percentile_00_5, AI_FLOAT percentile_99_5);
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetUseMirroring(AI_HANDLE AI_Hdl, AI_BOOL use_mirroring);
 
 // �ͷ���Դ
 DentalCbctSegAI_API AI_VOID      DentalCbctSegAI_ReleseObj(AI_HANDLE AI_Hdl);

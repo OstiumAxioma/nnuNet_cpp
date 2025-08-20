@@ -24,25 +24,22 @@ DentalUnet::DentalUnet()
 
 	// ģ��·��Ӧ����������ͨ�� setModelFns ����
 	unetConfig.model_file_name = nullptr;  // ��ʼ��Ϊ�գ��ȴ��ⲿ����
+	
+	// ��ʼ��Ĭ��ֵ��������ҽ���setXXX���������
 	unetConfig.input_channels = 1;
 	unetConfig.num_classes = 3;
 	unetConfig.mandible_label = 1;
 	unetConfig.maxilla_label = 2;
 	unetConfig.sinus_label = 3;
-	//unetConfig.ian_label = 4;
-	//unetConfig.uppertooth_label = 5;
-	//unetConfig.lowertooth_label = 6;
 	unetConfig.cimg_transpose_forward  = "xyz";
 	unetConfig.cimg_transpose_backward = "xyz";
 	unetConfig.transpose_forward  = { 0, 1, 2 };
 	unetConfig.transpose_backward = { 0, 1, 2 };
-	unetConfig.voxel_spacing = { 0.5810545086860657f, 0.5810545086860657f, 1.0f };
-	unetConfig.patch_size = { 160, 160, 96 };
-	unetConfig.step_size_ratio = 0.75f;
-	unetConfig.normalization_type = "CTNormalization";
-	unetConfig.min_max_HU = { -172.01852416992188f,  1824.9935302734375f };
-	unetConfig.mean_std_HU = { 274.2257080078125f, 366.05450439453125f };
 	unetConfig.use_mirroring = false;
+	
+	// ������Ҫ����ⲿ�����Ĳ���
+	// voxel_spacing, patch_size, step_size_ratio, normalization_type, intensity properties
+	// ��Щ������ֻ�������� JSON ���ú����趨
 	
 	// Initialize output paths
 	saveIntermediateResults = false;
@@ -89,6 +86,52 @@ void  DentalUnet::setStepSizeRatio(float ratio)
 	{
 		unetConfig.step_size_ratio = 0.5f;
 	}
+}
+
+// 新增：参数设置接口实现
+void DentalUnet::setPatchSize(int64_t x, int64_t y, int64_t z)
+{
+	unetConfig.patch_size = { x, y, z };
+}
+
+void DentalUnet::setNumClasses(int classes)
+{
+	unetConfig.num_classes = classes;
+}
+
+void DentalUnet::setInputChannels(int channels)
+{
+	unetConfig.input_channels = channels;
+}
+
+void DentalUnet::setTargetSpacing(float x, float y, float z)
+{
+	unetConfig.voxel_spacing = { x, y, z };
+}
+
+void DentalUnet::setTransposeSettings(int forward_x, int forward_y, int forward_z, 
+                                    int backward_x, int backward_y, int backward_z)
+{
+	unetConfig.transpose_forward = { forward_x, forward_y, forward_z };
+	unetConfig.transpose_backward = { backward_x, backward_y, backward_z };
+}
+
+void DentalUnet::setNormalizationType(const char* type)
+{
+	unetConfig.normalization_type = type;
+}
+
+void DentalUnet::setIntensityProperties(float mean, float std, float min_val, float max_val,
+                                      float percentile_00_5, float percentile_99_5)
+{
+	unetConfig.mean_std_HU = { mean, std };
+	unetConfig.min_max_HU = { min_val, max_val };
+	// 注意：percentile值暂时存储在mean_std_HU中，实际使用时需要根据normalization_type决定
+}
+
+void DentalUnet::setUseMirroring(bool use_mirroring)
+{
+	unetConfig.use_mirroring = use_mirroring;
 }
 
 

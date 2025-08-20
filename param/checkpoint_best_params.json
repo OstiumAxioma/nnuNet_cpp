@@ -1,0 +1,62 @@
+{
+    "all_labels": [
+        0,
+        1,
+        2,
+        3
+    ],
+    "num_classes": 4,
+    "num_input_channels": 1,
+    "patch_size": [
+        128,
+        128,
+        128
+    ],
+    "target_spacing": [
+        0.699999988079071,
+        0.699999988079071,
+        0.699999988079071
+    ],
+    "transpose_forward": [
+        0,
+        1,
+        2
+    ],
+    "transpose_backward": [
+        0,
+        1,
+        2
+    ],
+    "intensity_properties": {
+        "0": {
+            "max": 2528.466552734375,
+            "mean": 757.3162841796875,
+            "median": 749.616455078125,
+            "min": 2.7977347373962402,
+            "percentile_00_5": 286.2850341796875,
+            "percentile_99_5": 1112.6239013671875,
+            "std": 156.12234497070312
+        }
+    },
+    "normalization_schemes": [
+        "ZScoreNormalization"
+    ],
+    "use_mask_for_norm": [
+        false
+    ],
+    "resampling_fn_data": "resample_data_or_seg_to_shape",
+    "resampling_fn_data_kwargs": {
+        "is_seg": false,
+        "order": 3,
+        "order_z": 0,
+        "force_separate_z": null
+    },
+    "resampling_fn_probabilities": "resample_data_or_seg_to_shape",
+    "resampling_fn_probabilities_kwargs": {
+        "is_seg": false,
+        "order": 1,
+        "order_z": 0,
+        "force_separate_z": null
+    },
+    "use_tta": false
+}

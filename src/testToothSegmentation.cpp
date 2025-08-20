@@ -6,8 +6,6 @@
 #include <chrono>
 #include <windows.h>
 #include <exception>
-#include <csignal>
-#include <typeinfo>
 #include <clocale>
 #include <cstdlib>
 #include <direct.h>  // for _mkdir
@@ -18,43 +16,18 @@
 
 
 // onnx 相关
-#include "..\header\DentalCbctSegAI_API.h"
-#include "..\lib\onnxruntime\include\onnxruntime_cxx_api.h"
-#pragma comment(lib, "..\\lib\\DentalCbctOnnxSegDLL.lib")
+#include "..\\header\\DentalCbctSegAI_API.h"
+#include "..\\lib\\onnxruntime\\include\\onnxruntime_cxx_api.h"
+#pragma comment(lib, "..\\\\lib\\\\DentalCbctOnnxSegDLL.lib")
 
-#pragma comment(lib,"..\\lib\\onnxruntime\\lib\\onnxruntime.lib")
-#pragma comment(lib,"..\\lib\\onnxruntime\\lib\\onnxruntime_providers_shared.lib")
-#pragma comment(lib,"..\\lib\\onnxruntime\\lib\\onnxruntime_providers_cuda.lib")
-//#pragma comment(lib,"..\\utility\\onnxruntime\\lib\\onnxruntime_providers_tensorrt.lib")
+#pragma comment(lib,"..\\\\lib\\\\onnxruntime\\\\lib\\\\onnxruntime.lib")
+#pragma comment(lib,"..\\\\lib\\\\onnxruntime\\\\lib\\\\onnxruntime_providers_shared.lib")
+#pragma comment(lib,"..\\\\lib\\\\onnxruntime\\\\lib\\\\onnxruntime_providers_cuda.lib")
 
-
-/*
-// libtorch 231 相关
-#include "DentalCbctSegAI_API.h"
-#pragma comment(lib, "..\\x64\\Release\\DentalCbctSegDLL.lib")
-
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\asmjit.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\c10.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\c10_cuda.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\cpuinfo.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\fbgemm.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\torch.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\torch_cpu.lib")
-#pragma comment(lib,"..\\utility\\libtorch231\\lib\\torch_cuda.lib")
-*/
-
-
-//"/INCLUDE:?warp_size@cuda@at@@YAHXZ"
-
-//113:
-//"/INCLUDE:?warp_size@cuda@at@@YAHXZ /INCLUDE:?_torch_cuda_cu_linker_symbol_op_cuda@native@at@@YA?AVTensor@2@AEBV32@@Z"
-
-//230
-//" /INCLUDE:?warp_size@cuda@at@@YAHXZ /INCLUDE:"?ignore_this_library_placeholder@@YAHXZ" "
 
 //CImg用于二进制存储输入输出
 #define cimg_display_type 2
-#include "..\lib\CImg\CImg.h"
+#include "..\\lib\\CImg\\CImg.h"
 
 //ITK用于读写医学图像并保留origin信息
 #include <itkImage.h>
@@ -71,12 +44,11 @@ using namespace cimg_library;
 string readJsonFile(const string& jsonPath) {
     ifstream file(jsonPath);
     if (!file.is_open()) {
-        cout << "Error: Cannot open config file: " << jsonPath << endl;
+        cout << "Cannot open config file: " << jsonPath << endl;
         return "";
     }
     
-    string line;
-    string jsonContent;
+    string line, jsonContent;
     while (getline(file, line)) {
         jsonContent += line;
     }
@@ -85,559 +57,269 @@ string readJsonFile(const string& jsonPath) {
     return jsonContent;
 }
 
-// 函数：根据扩展名过滤并列出目录中的文件，让用户选择
+// 简化的文件选择函数
 string selectFileFromDirectory(const string& directory, const string& fileType, const vector<string>& allowedExtensions) {
     vector<string> files;
     
-    try {
-        // 检查目录是否存在
-        if (!filesystem::exists(directory)) {
-            cout << "Error: Directory " << directory << " does not exist!" << endl;
-            return "";
-        }
-        
-        // 遍历目录获取文件，并根据扩展名过滤
-        for (const auto& entry : filesystem::directory_iterator(directory)) {
-            if (entry.is_regular_file()) {
-                string filename = entry.path().filename().string();
-                string extension = entry.path().extension().string();
-                
-                // 转换为小写进行比较
-                transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-                
-                // 检查文件扩展名是否在允许的列表中
-                bool isAllowed = false;
-                for (const auto& allowedExt : allowedExtensions) {
-                    string lowerAllowedExt = allowedExt;
-                    transform(lowerAllowedExt.begin(), lowerAllowedExt.end(), lowerAllowedExt.begin(), ::tolower);
-                    if (extension == lowerAllowedExt) {
-                        isAllowed = true;
-                        break;
-                    }
-                }
-                
-                // 特殊处理 .nii.gz 文件
-                if (!isAllowed && filename.length() > 7) {
-                    string lastPart = filename.substr(filename.length() - 7);
-                    transform(lastPart.begin(), lastPart.end(), lastPart.begin(), ::tolower);
-                    for (const auto& allowedExt : allowedExtensions) {
-                        string lowerAllowedExt = allowedExt;
-                        transform(lowerAllowedExt.begin(), lowerAllowedExt.end(), lowerAllowedExt.begin(), ::tolower);
-                        if (lastPart == lowerAllowedExt) {
-                            isAllowed = true;
-                            break;
-                        }
-                    }
-                }
-                
-                if (isAllowed) {
+    if (!filesystem::exists(directory)) {
+        cout << "Directory " << directory << " does not exist!" << endl;
+        return "";
+    }
+    
+    // 遍历目录获取文件
+    for (const auto& entry : filesystem::directory_iterator(directory)) {
+        if (entry.is_regular_file()) {
+            string filename = entry.path().filename().string();
+            string extension = entry.path().extension().string();
+            transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+            
+            // 检查扩展名
+            for (const auto& allowedExt : allowedExtensions) {
+                string lowerAllowedExt = allowedExt;
+                transform(lowerAllowedExt.begin(), lowerAllowedExt.end(), lowerAllowedExt.begin(), ::tolower);
+                if (extension == lowerAllowedExt || 
+                    (allowedExt == ".nii.gz" && filename.length() > 7 && 
+                     filename.substr(filename.length() - 7) == ".nii.gz")) {
                     files.push_back(filename);
+                    break;
                 }
             }
         }
-        
-        if (files.empty()) {
-            cout << "Error: No files found in directory " << directory << "!" << endl;
-            return "";
-        }
-        
-        // 显示文件列表
-        cout << "\nFound " << fileType << " files in directory " << directory << ":" << endl;
-        for (size_t i = 0; i < files.size(); ++i) {
-            cout << "[" << (i + 1) << "] " << files[i] << endl;
-        }
-        
-        // 用户选择
-        int choice;
-        cout << "\nPlease select file number (1-" << files.size() << "): ";
-        cin >> choice;
-        
-        if (choice < 1 || choice > static_cast<int>(files.size())) {
-            cout << "Error: Invalid selection!" << endl;
-            return "";
-        }
-        
-        string selectedFile = directory + "\\\\" + files[choice - 1];
-        cout << "Selected file: " << selectedFile << endl;
-        return selectedFile;
-        
-    } catch (const filesystem::filesystem_error& e) {
-        cout << "Filesystem error: " << e.what() << endl;
+    }
+    
+    if (files.empty()) {
+        cout << "No " << fileType << " files found!" << endl;
         return "";
     }
-}
-
-// 信号处理函数
-void SignalHandler(int signal) {
-    std::cerr << "\n===== Program Exception =====" << std::endl;
-    std::cerr << "Signal: " << signal << std::endl;
-    switch(signal) {
-        case SIGSEGV:
-            std::cerr << "Segmentation fault (SIGSEGV)" << std::endl;
-            break;
-        case SIGFPE:
-            std::cerr << "Floating point exception (SIGFPE)" << std::endl;
-            break;
-        case SIGILL:
-            std::cerr << "Illegal instruction (SIGILL)" << std::endl;
-            break;
-        case SIGABRT:
-            std::cerr << "Program abort (SIGABRT)" << std::endl;
-            break;
-    }
-    system("pause");
-    exit(1);
-}
-
-// SEH异常处理器
-LONG WINAPI MyUnhandledExceptionFilter(EXCEPTION_POINTERS* pExceptionInfo) {
-    std::cerr << "\n===== Unhandled SEH Exception =====" << std::endl;
-    std::cerr << "Exception Code: 0x" << std::hex << pExceptionInfo->ExceptionRecord->ExceptionCode << std::dec << std::endl;
     
-    switch(pExceptionInfo->ExceptionRecord->ExceptionCode) {
-        case EXCEPTION_ACCESS_VIOLATION:
-            std::cerr << "Access Violation" << std::endl;
-            break;
-        case EXCEPTION_STACK_OVERFLOW:
-            std::cerr << "Stack Overflow" << std::endl;
-            break;
-        case 0xE06D7363:
-            std::cerr << "C++ Exception (0xE06D7363)" << std::endl;
-            break;
+    // 显示文件列表
+    cout << "\\n" << fileType << " files:" << endl;
+    for (size_t i = 0; i < files.size(); ++i) {
+        cout << "[" << (i + 1) << "] " << files[i] << endl;
     }
     
-    system("pause");
-    return EXCEPTION_EXECUTE_HANDLER;
-}
-
-// 包装的函数，用于执行可能抛出SEH异常的代码
-int SafeInfer(AI_HANDLE AI_Hdl, AI_DataInfo* srcData, AI_INT& AIWorkStatus) {
-    __try {
-        AIWorkStatus = DentalCbctSegAI_Infer(AI_Hdl, srcData);
-        return 0; // 成功
+    // 用户选择
+    int choice;
+    cout << "Select file (1-" << files.size() << "): ";
+    cin >> choice;
+    
+    if (choice < 1 || choice > (int)files.size()) {
+        cout << "Invalid selection!" << endl;
+        return "";
     }
-    __except(EXCEPTION_EXECUTE_HANDLER) {
-        DWORD exceptionCode = GetExceptionCode();
-        std::cerr << "\n===== SEH Exception in DentalCbctSegAI_Infer =====" << std::endl;
-        std::cerr << "Exception Code: 0x" << std::hex << exceptionCode << std::dec << std::endl;
-        
-        if (exceptionCode == 0xE06D7363) {
-            std::cerr << "DLL内部抛出了C++异常" << std::endl;
-            // 实际的错误信息应该在DLL内部的日志中
-        }
-        
-        return -1; // 失败
-    }
+    
+    return directory + "\\\\\\\\" + files[choice - 1];
 }
 
 int main()
-{	
-	// 设置locale以支持中文
-	//setlocale(LC_ALL, "chs");
-	
-	
-	// 安装信号处理器
-	signal(SIGSEGV, SignalHandler);
-	signal(SIGFPE, SignalHandler);
-	signal(SIGILL, SignalHandler);
-	signal(SIGABRT, SignalHandler);
-	
-	// 设置SEH异常处理器
-	SetUnhandledExceptionFilter(MyUnhandledExceptionFilter);
-	
-	try {
-		std::cout << "程序开始运行..." << std::endl;
-		
-		//===== 用户选择配置文件 =====
-		cout << "======= Config File Selection =======" << endl;
-		vector<string> configExtensions = {".json"};
-		string configPath = selectFileFromDirectory("..\\..\\..\\param", "config", configExtensions);
-		if (configPath.empty()) {
-			cout << "Error: Failed to select config file, program exit!" << endl;
-			system("pause");
-			return -1;
-		}
-		
-		//===== 用户选择模型文件 =====
-		cout << "\n======= Model File Selection =======" << endl;
-		vector<string> modelExtensions = {".onnx"};
-		string modelPath = selectFileFromDirectory("..\\..\\..\\model", "model", modelExtensions);
-		if (modelPath.empty()) {
-			cout << "Error: Failed to select model file, program exit!" << endl;
-			system("pause");
-			return -1;
-		}
-		
-		//===== 用户选择输入数据文件 =====
-		cout << "\n======= Input Data File Selection =======" << endl;
-		//load raw volume data: 左右左前右后；头脚右左，上下头脚，头顶脚底
-		vector<string> inputExtensions = {".hdr", ".nii", ".nii.gz"};
-		std::string inputHdrPath = selectFileFromDirectory("..\\..\\..\\img", "input data", inputExtensions);
-		if (inputHdrPath.empty()) {
-			cout << "Error: Failed to select input data file, program exit!" << endl;
-			system("pause");
-			return -1;
-		}
-		
-		//===== 读取JSON配置文件内容 =====
-		cout << "\n======= Loading Configuration =======" << endl;
-		string jsonContent = readJsonFile(configPath);
-		if (jsonContent.empty()) {
-			cout << "Error: Failed to read config file, program exit!" << endl;
-			system("pause");
-			return -1;
-		}
-		
-		cout << "Configuration file loaded: " << configPath << endl;
-		cout << "JSON content length: " << jsonContent.length() << " characters" << endl;
-		std::cout << "正在使用ITK加载HDR图像文件..." << std::endl;
-		std::cout << "文件路径: " << inputHdrPath << std::endl;
-		
-		// ITK图像类型定义
-		using PixelType = short;
-		using ImageType = itk::Image<PixelType, 3>;
-		using ReaderType = itk::ImageFileReader<ImageType>;
-		
-		// 使用ITK读取图像
-		ReaderType::Pointer reader = ReaderType::New();
-		reader->SetFileName(inputHdrPath);
-		
-		ImageType::Pointer itkImage;
-		try {
-			reader->Update();
-			itkImage = reader->GetOutput();
-			std::cout << "ITK图像加载成功" << std::endl;
-		} catch (itk::ExceptionObject& e) {
-			std::cerr << "ITK读取图像失败: " << e << std::endl;
-			return -1;
-		}
-		
-		// 获取图像元数据
-		ImageType::SpacingType spacing = itkImage->GetSpacing();
-		ImageType::PointType origin = itkImage->GetOrigin();
-		ImageType::DirectionType direction = itkImage->GetDirection();
-		ImageType::RegionType region = itkImage->GetLargestPossibleRegion();
-		ImageType::SizeType size = region.GetSize();
-		
-		// 从HDR文件读取真实的voxel spacing
-		float real_voxel_size[3] = {
-			static_cast<float>(spacing[0]),
-			static_cast<float>(spacing[1]),
-			static_cast<float>(spacing[2])
-		};
-		
-		std::cout << "原始图像真实spacing: X=" << real_voxel_size[0] 
-		         << ", Y=" << real_voxel_size[1] 
-		         << ", Z=" << real_voxel_size[2] << " mm" << std::endl;
-		std::cout << "原始图像origin: X=" << origin[0]
-		         << ", Y=" << origin[1]
-		         << ", Z=" << origin[2] << " mm" << std::endl;
-		
-		// 将ITK图像数据复制到CImg
-		CImg<short> inputCbctVolume(size[0], size[1], size[2], 1, 0);
-		itk::ImageRegionIterator<ImageType> it(itkImage, region);
-		short* cimg_data = inputCbctVolume.data();
-		for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
-			*cimg_data++ = it.Get();
-		}
+{
+    try {
+        cout << "程序开始运行..." << endl;
+        
+        //===== 用户选择配置文件 =====
+        cout << "\\n======= Config File Selection =======" << endl;
+        vector<string> configExtensions = {".json"};
+        string configPath = selectFileFromDirectory("..\\\\..\\\\..\\\\param", "config", configExtensions);
+        if (configPath.empty()) {
+            cout << "Failed to select config file!" << endl;
+            system("pause");
+            return -1;
+        }
+        
+        //===== 用户选择模型文件 =====
+        cout << "\\n======= Model File Selection =======" << endl;
+        vector<string> modelExtensions = {".onnx"};
+        string modelPath = selectFileFromDirectory("..\\\\..\\\\..\\\\model", "model", modelExtensions);
+        if (modelPath.empty()) {
+            cout << "Failed to select model file!" << endl;
+            system("pause");
+            return -1;
+        }
+        
+        //===== 用户选择输入数据文件 =====
+        cout << "\\n======= Input Data File Selection =======" << endl;
+        vector<string> inputExtensions = {".hdr", ".nii", ".nii.gz"};
+        string inputHdrPath = selectFileFromDirectory("..\\\\..\\\\..\\\\img", "input data", inputExtensions);
+        if (inputHdrPath.empty()) {
+            cout << "Failed to select input data file!" << endl;
+            system("pause");
+            return -1;
+        }
+        
+        //===== 读取JSON配置文件内容 =====
+        cout << "\\n======= Loading Configuration =======" << endl;
+        string jsonContent = readJsonFile(configPath);
+        if (jsonContent.empty()) {
+            cout << "Failed to read config file!" << endl;
+            system("pause");
+            return -1;
+        }
+        cout << "Configuration loaded successfully." << endl;
+        
+        //===== 使用ITK加载图像 =====
+        cout << "\\n======= Loading Image =======" << endl;
+        cout << "Loading: " << inputHdrPath << endl;
+        
+        // ITK图像类型定义
+        using PixelType = short;
+        using ImageType = itk::Image<PixelType, 3>;
+        using ReaderType = itk::ImageFileReader<ImageType>;
+        
+        // 使用ITK读取图像
+        ReaderType::Pointer reader = ReaderType::New();
+        reader->SetFileName(inputHdrPath);
+        
+        ImageType::Pointer itkImage;
+        reader->Update();
+        itkImage = reader->GetOutput();
+        cout << "Image loaded successfully" << endl;
+        
+        // 获取图像元数据
+        ImageType::SpacingType spacing = itkImage->GetSpacing();
+        ImageType::PointType origin = itkImage->GetOrigin();
+        ImageType::DirectionType direction = itkImage->GetDirection();
+        ImageType::RegionType region = itkImage->GetLargestPossibleRegion();
+        ImageType::SizeType size = region.GetSize();
+        
+        cout << "Image size: " << size[0] << "x" << size[1] << "x" << size[2] << endl;
+        cout << "Spacing: " << spacing[0] << "x" << spacing[1] << "x" << spacing[2] << " mm" << endl;
+        
+        // 将ITK图像数据复制到CImg
+        CImg<short> inputCbctVolume(size[0], size[1], size[2], 1, 0);
+        itk::ImageRegionIterator<ImageType> it(itkImage, region);
+        short* cimg_data = inputCbctVolume.data();
+        for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
+            *cimg_data++ = it.Get();
+        }
 
-	float VoxelSpacing  = 1.0f; //unit: mm  0.3
-	float VoxelSpacingX = 0.5810545086860657f; //unit: mm  0.3
-	float VoxelSpacingY = 0.5810545086860657f; //unit: mm  0.3
-	float VoxelSpacingZ = 1.0f; //unit: mm  0.3
-	
-	int Width0 = inputCbctVolume.width();
-	int Height0 = inputCbctVolume.height();
-	int Depth0 = inputCbctVolume.depth();
+        // 准备API数据结构
+        float real_voxel_size[3] = {
+            static_cast<float>(spacing[0]),
+            static_cast<float>(spacing[1]),
+            static_cast<float>(spacing[2])
+        };
+        
+        AI_DataInfo *srcData = (AI_DataInfo*)malloc(sizeof(AI_DataInfo));
+        srcData->Width = size[0];
+        srcData->Height = size[1];
+        srcData->Depth = size[2];
+        srcData->VoxelSpacing = 1.0f;
+        srcData->VoxelSpacingX = real_voxel_size[0];
+        srcData->VoxelSpacingY = real_voxel_size[1];
+        srcData->VoxelSpacingZ = real_voxel_size[2];
+        srcData->OriginalVoxelSpacingX = real_voxel_size[0];
+        srcData->OriginalVoxelSpacingY = real_voxel_size[1];
+        srcData->OriginalVoxelSpacingZ = real_voxel_size[2];
+        srcData->OriginX = origin[0];
+        srcData->OriginY = origin[1];
+        srcData->OriginZ = origin[2];
+        srcData->ptr_Data = inputCbctVolume.data();
 
-	//查看slice的位置显示图像是否正确放置
-	//根据数据方位属性，可通过rotate XY 90、180、-90度进行调整
-	//inputCbctVolume.rotate(180); //90, -90, 180
-	//inputCbctVolume -= 1024;
-
-	//CImg<short> slice_z = inputCbctVolume.get_slice( Depth0 / 2);
-	//slice_z.display("slice 120");
-	//关闭显示窗口后，程序继续运行
-
-	//创建输入数据结构信息
-	short* ptrCbctData = inputCbctVolume.data();
-	AI_DataInfo *srcData = (AI_DataInfo*)malloc(sizeof(AI_DataInfo));
-	srcData->Width = Width0;
-	srcData->Height = Height0;
-	srcData->Depth = Depth0;
-	srcData->VoxelSpacing = VoxelSpacing;
-	srcData->VoxelSpacingX = VoxelSpacingX;
-	srcData->VoxelSpacingY = VoxelSpacingY;
-	srcData->VoxelSpacingZ = VoxelSpacingZ;
-	// 设置原始spacing（从HDR文件读取的真实值）
-	srcData->OriginalVoxelSpacingX = real_voxel_size[0];
-	srcData->OriginalVoxelSpacingY = real_voxel_size[1];
-	srcData->OriginalVoxelSpacingZ = real_voxel_size[2];
-	// 设置origin信息
-	srcData->OriginX = origin[0];
-	srcData->OriginY = origin[1];
-	srcData->OriginZ = origin[2];
-	srcData->ptr_Data = ptrCbctData; //CBCT数据块指针
-
-	//初始化牙齿分割输出数据信息
-	CImg<short> toothLabelMask = CImg<short>(Width0, Height0, Depth0, 1, 0);
-
-	AI_DataInfo *toothSegData = (AI_DataInfo*)malloc(sizeof(AI_DataInfo));
-	toothSegData->Width = Width0;
-	toothSegData->Height = Height0;
-	toothSegData->Depth = Depth0;
-	toothSegData->VoxelSpacing = VoxelSpacing;
-	toothSegData->VoxelSpacingX = VoxelSpacingX;
-	toothSegData->VoxelSpacingY = VoxelSpacingY;
-	toothSegData->VoxelSpacingZ = VoxelSpacingZ;
-	toothSegData->ptr_Data = toothLabelMask.data();//分割label数据块指针
-
-
-	auto start = std::chrono::steady_clock::now();
-
-	//调用牙齿分割模型
-	//初始化分割模型对象
-	std::cout << "\nInitializing segmentation model..." << std::endl;
-	AI_HANDLE  AI_Hdl = DentalCbctSegAI_CreateObj();
-	if (AI_Hdl == NULL) {
-		std::cerr << "Error: Model initialization failed!" << std::endl;
-		return DentalCbctSegAI_STATUS_HANDLE_NULL; //模型初始化失败
-	}
-	std::cout << "Model initialized successfully" << std::endl;
-
-	//===== 配置模型参数 =====
-	cout << "\n======= Configuring Model Parameters =======" << endl;
-	
-	// 使用新的JSON配置接口
-	AI_INT config_status = DentalCbctSegAI_SetConfigFromJson(AI_Hdl, jsonContent.c_str());
-	cout << "SetConfigFromJson status: " << config_status << endl;
-	
-	if (config_status != DentalCbctSegAI_STATUS_SUCCESS) {
-		cout << "Error: Failed to set configuration from JSON!" << endl;
-		// 释放资源
-		if (AI_Hdl) DentalCbctSegAI_ReleseObj(AI_Hdl);
-		if (srcData) free(srcData);
-		if (toothSegData) free(toothSegData);
-		system("pause");
-		return -1;
-	} else {
-		cout << "Model configuration set successfully from JSON!" << endl;
-	}
-
-	std::cout << "\nSetting model path..." << std::endl;
-	std::cout << "模型文件: " << modelPath << std::endl;
-	// 转换为宽字符串
-	std::wstring wModelPath(modelPath.begin(), modelPath.end());
-	AI_INT status1 = DentalCbctSegAI_SetModelPath(AI_Hdl, const_cast<wchar_t*>(wModelPath.c_str()));
-	std::cout << "SetModelPath返回状态: " << status1 << std::endl;
-
-	// 设置TileStepRatio
-	float tileRatio = 0.5f;
-	AI_INT status2 = DentalCbctSegAI_SetTileStepRatio(AI_Hdl, tileRatio);
-	std::cout << "SetTileStepRatio(" << tileRatio << ")返回状态: " << status2 << std::endl;
-
-	// 设置输出路径以保存三个阶段的中间结果
-	std::wstring preprocessPath = L"..\\..\\..\\result\\preprocess";
-	std::wstring modelOutputPath = L"..\\..\\..\\result\\model_output";
-	std::wstring postprocessPath = L"..\\..\\..\\result\\postprocess";
-	
-	std::cout << "\n设置中间结果输出路径..." << std::endl;
-	AI_INT status3 = DentalCbctSegAI_SetOutputPaths(AI_Hdl, 
-	                                                const_cast<wchar_t*>(preprocessPath.c_str()),
-	                                                const_cast<wchar_t*>(modelOutputPath.c_str()),
-	                                                const_cast<wchar_t*>(postprocessPath.c_str()));
-	std::cout << "SetOutputPaths返回状态: " << status3 << std::endl;
-
-	// 打印输入数据信息
-	std::cout << "\n输入数据信息:" << std::endl;
-	std::cout << "  尺寸: " << srcData->Width << " x " << srcData->Height << " x " << srcData->Depth << std::endl;
-	std::cout << "  体素间距: X=" << srcData->VoxelSpacingX << ", Y=" << srcData->VoxelSpacingY << ", Z=" << srcData->VoxelSpacingZ << std::endl;
-	std::cout << "  数据指针: " << (void*)srcData->ptr_Data << std::endl;
-
-	// 调用模型推理，可能抛出 ONNX Runtime 异常
-	std::cout << "\n开始模型推理..." << std::endl;
-	
-	AI_INT	AIWorkStatus = DentalCbctSegAI_STATUS_FAIED;
-	int result = SafeInfer(AI_Hdl, srcData, AIWorkStatus);
-	
-	if (result != 0) {
-		// SEH异常处理
-		// 释放资源
-		if (AI_Hdl) DentalCbctSegAI_ReleseObj(AI_Hdl);
-		if (srcData) free(srcData);
-		if (toothSegData) free(toothSegData);
-		
-		system("pause");
-		return -7001;
-	}
-	
-	std::cout << "模型推理完成，状态码: " << AIWorkStatus << std::endl;
-	
-	// 检查推理状态
-	if (AIWorkStatus != DentalCbctSegAI_STATUS_SUCCESS) {
-		std::cerr << "ERROR: Model inference failed with status: " << AIWorkStatus << std::endl;
-		// 释放资源
-		if (AI_Hdl) DentalCbctSegAI_ReleseObj(AI_Hdl);
-		if (srcData) free(srcData);
-		if (toothSegData) free(toothSegData);
-		system("pause");
-		return AIWorkStatus;
-	}
-
-	//获取牙齿分割结果
-	std::cout << "Getting segmentation results..." << std::endl;
-	DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
-
-	//释放对象
-	DentalCbctSegAI_ReleseObj(AI_Hdl);
-	free(srcData);
-	free(toothSegData);
-	// 牙齿分割流程结束
-
-	//关于输出toothSegData说明：
-	//针对小视野CBCT：
-    //totalToothNumber:分割出的牙齿数量
-    //牙齿编号k=1,2,3,...,totalToothNumber，牙髓labelΪ3k，牙本质labelΪ3k+1，牙冠或金属部件labelΪ3k+2
-    //针对大视野CBCT：
-    //upperToothNumber:上颌牙数
-    //lower_tooth_number:下颌牙数
-    //上颌牙编号k=1,2,3,...,upperToothNumber，牙髓labelΪ3k，牙本质labelΪ3k+1，牙冠或金属部件labelΪ3k+2
-    //下颌牙编号k=-1,-2,-3,...,-lowerToothNumber，牙髓labelΪ-3k，牙本质labelΪ-3k-1，牙冠或金属部件labelΪ-3k-2
-	
-
-	auto end = std::chrono::steady_clock::now();
-	std::chrono::duration<double> elapsed_seconds = end - start;
-	std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
-
-	//CImg<short> mask_z = toothLabelMask.get_slice(Depth0 / 2);
-	//mask_z.display("mask 205");
-
-
-	//保存指向结果目录
-	// 确保结果目录存在
-	std::string resultDir = "..\\..\\..\\result";
-	_mkdir(resultDir.c_str()); // 如果目录已存在会失败，但不影响
-	
-	std::string resultPath = resultDir + "\\finalLabelMask.hdr";
-	
-	// 使用ITK保存结果，保留origin信息
-	std::cout << "\n使用ITK保存分割结果..." << std::endl;
-	
-	// 创建输出ITK图像
-	using WriterType = itk::ImageFileWriter<ImageType>;
-	ImageType::Pointer outputImage = ImageType::New();
-	
-	// 设置图像属性
-	outputImage->SetRegions(region);
-	outputImage->SetSpacing(spacing);
-	outputImage->SetOrigin(origin);  // 使用输入图像的origin
-	outputImage->SetDirection(direction);  // 使用输入图像的direction
-	outputImage->Allocate();
-	
-	// 如果toothSegData中有更新的origin信息，使用它
-	if (toothSegData->OriginX != 0 || toothSegData->OriginY != 0 || toothSegData->OriginZ != 0) {
-		ImageType::PointType outputOrigin;
-		outputOrigin[0] = toothSegData->OriginX;
-		outputOrigin[1] = toothSegData->OriginY;
-		outputOrigin[2] = toothSegData->OriginZ;
-		outputImage->SetOrigin(outputOrigin);
-		std::cout << "使用分割结果的origin: X=" << outputOrigin[0]
-		         << ", Y=" << outputOrigin[1]
-		         << ", Z=" << outputOrigin[2] << " mm" << std::endl;
-	} else {
-		std::cout << "使用原始图像的origin: X=" << origin[0]
-		         << ", Y=" << origin[1]
-		         << ", Z=" << origin[2] << " mm" << std::endl;
-	}
-	
-	// 复制分割结果到ITK图像
-	itk::ImageRegionIterator<ImageType> outIt(outputImage, region);
-	short* resultPtr = toothLabelMask.data();
-	for (outIt.GoToBegin(); !outIt.IsAtEnd(); ++outIt) {
-		outIt.Set(*resultPtr++);
-	}
-	
-	// 使用ITK写入文件
-	WriterType::Pointer writer = WriterType::New();
-	writer->SetFileName(resultPath);
-	writer->SetInput(outputImage);
-	
-	try {
-		writer->Update();
-		std::cout << "分割结果保存成功: " << resultPath << std::endl;
-	} catch (itk::ExceptionObject& e) {
-		std::cerr << "ITK保存图像失败: " << e << std::endl;
-		return -1;
-	}
-
-		std::cout << "\n程序执行成功完成!" << std::endl;
-		
-		// 打印输入输出信息汇总
-		std::cout << "\n========== 执行信息汇总 ==========" << std::endl;
-		std::cout << "输入数据:" << std::endl;
-		std::cout << "  - HDR文件: " << inputHdrPath << std::endl;
-		std::cout << "  - 绝对路径: D:\\Project\\nnuNet_cpp\\img\\Series_5_Acq_2_0000.hdr" << std::endl;
-		std::cout << "  - 数据尺寸: " << Width0 << " x " << Height0 << " x " << Depth0 << std::endl;
-		std::cout << "  - 体素间距: X=" << VoxelSpacingX << ", Y=" << VoxelSpacingY << ", Z=" << VoxelSpacingZ << " mm" << std::endl;
-		
-		std::cout << "\n使用模型:" << std::endl;
-		std::cout << "  - 模型文件: " << modelPath << std::endl;
-		std::cout << "  - 绝对路径: D:\\Project\\nnuNet_cpp\\model\\kneeseg_test.onnx" << std::endl;
-		std::cout << "  - TileStepRatio: " << tileRatio << std::endl;
-		
-		std::cout << "\n输出结果:" << std::endl;
-		std::cout << "  - 分割结果: " << resultPath << std::endl;
-		std::cout << "  - 绝对路径: D:\\Project\\nnuNet_cpp\\result\\finalLabelMask.hdr" << std::endl;
-		std::cout << "  - 注意: HDR格式会同时生成.hdr和.img两个文件" << std::endl;
-		
-		std::cout << "\n中间结果保存路径:" << std::endl;
-		std::cout << "  - 预处理结果: ..\\..\\..\\result\\preprocess" << std::endl;
-		std::cout << "  - 模型输出: ..\\..\\..\\result\\model_output" << std::endl;
-		std::cout << "  - 后处理结果: ..\\..\\..\\result\\postprocess" << std::endl;
-		
-		// 获取当前时间
-		auto now = std::chrono::system_clock::now();
-		auto time_t = std::chrono::system_clock::to_time_t(now);
-		struct tm timeinfo;
-		localtime_s(&timeinfo, &time_t);
-		char timeStr[100];
-		strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
-		std::cout << "  - 生成时间: " << timeStr << std::endl;
-		std::cout << "=================================" << std::endl;
-		system("pause");
-		return AIWorkStatus;
-		
-	} catch (const CImgIOException& e) {
-		std::cerr << "\n===== CImg IO异常 =====" << std::endl;
-		std::cerr << "错误信息: " << e.what() << std::endl;
-		system("pause");
-		return -2001;
-	} catch (const CImgException& e) {
-		std::cerr << "\n===== CImg异常 =====" << std::endl;
-		std::cerr << "错误信息: " << e.what() << std::endl;
-		system("pause");
-		return -2002;
-	} catch (const Ort::Exception& e) {
-		std::cerr << "\n===== ONNX Runtime异常 =====" << std::endl;
-		std::cerr << "错误信息: " << e.what() << std::endl;
-		system("pause");
-		return -3001;
-	} catch (const std::bad_alloc& e) {
-		std::cerr << "\n===== 内存分配失败 =====" << std::endl;
-		std::cerr << "错误信息: " << e.what() << std::endl;
-		system("pause");
-		return -4001;
-	} catch (const std::exception& e) {
-		std::cerr << "\n===== 标准异常 =====" << std::endl;
-		std::cerr << "异常类型: " << typeid(e).name() << std::endl;
-		std::cerr << "错误信息: " << e.what() << std::endl;
-		system("pause");
-		return -5001;
-	} catch (...) {
-		std::cerr << "\n===== Unknown Exception =====" << std::endl;
-		std::cerr << "Caught unknown exception type" << std::endl;
-		system("pause");
-		return -6001;
-	}
+        //===== 初始化分割模型 =====
+        cout << "\\n======= Initializing Model =======" << endl;
+        AI_HANDLE AI_Hdl = DentalCbctSegAI_CreateObj();
+        if (AI_Hdl == NULL) {
+            cout << "Model initialization failed!" << endl;
+            free(srcData);
+            return -1;
+        }
+        
+        // 配置模型参数
+        AI_INT config_status = DentalCbctSegAI_SetConfigFromJson(AI_Hdl, jsonContent.c_str());
+        if (config_status != DentalCbctSegAI_STATUS_SUCCESS) {
+            cout << "Failed to set configuration!" << endl;
+            DentalCbctSegAI_ReleseObj(AI_Hdl);
+            free(srcData);
+            return -1;
+        }
+        
+        // 设置模型路径
+        wstring wModelPath(modelPath.begin(), modelPath.end());
+        AI_INT status1 = DentalCbctSegAI_SetModelPath(AI_Hdl, const_cast<wchar_t*>(wModelPath.c_str()));
+        if (status1 != DentalCbctSegAI_STATUS_SUCCESS) {
+            cout << "Failed to set model path!" << endl;
+            DentalCbctSegAI_ReleseObj(AI_Hdl);
+            free(srcData);
+            return -1;
+        }
+        
+        // 设置TileStepRatio
+        DentalCbctSegAI_SetTileStepRatio(AI_Hdl, 0.5f);
+        
+        //===== 执行分割推理 =====
+        cout << "\\n======= Running Inference =======" << endl;
+        auto start = chrono::steady_clock::now();
+        
+        AI_INT AIWorkStatus = DentalCbctSegAI_Infer(AI_Hdl, srcData);
+        
+        if (AIWorkStatus != DentalCbctSegAI_STATUS_SUCCESS) {
+            cout << "Model inference failed! Status: " << AIWorkStatus << endl;
+            DentalCbctSegAI_ReleseObj(AI_Hdl);
+            free(srcData);
+            return -1;
+        }
+        
+        auto end = chrono::steady_clock::now();
+        chrono::duration<double> elapsed = end - start;
+        cout << "Inference completed in " << elapsed.count() << "s" << endl;
+        
+        //===== 获取结果并保存 =====
+        cout << "\\n======= Saving Results =======" << endl;
+        
+        // 准备结果数据结构
+        CImg<short> toothLabelMask = CImg<short>(size[0], size[1], size[2], 1, 0);
+        AI_DataInfo *toothSegData = (AI_DataInfo*)malloc(sizeof(AI_DataInfo));
+        toothSegData->Width = size[0];
+        toothSegData->Height = size[1];
+        toothSegData->Depth = size[2];
+        toothSegData->VoxelSpacingX = real_voxel_size[0];
+        toothSegData->VoxelSpacingY = real_voxel_size[1];
+        toothSegData->VoxelSpacingZ = real_voxel_size[2];
+        toothSegData->ptr_Data = toothLabelMask.data();
+        
+        // 获取分割结果
+        DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
+        
+        // 使用ITK保存结果
+        string resultDir = "..\\\\..\\\\..\\\\result";
+        _mkdir(resultDir.c_str());
+        string resultPath = resultDir + "\\\\finalLabelMask.hdr";
+        
+        using WriterType = itk::ImageFileWriter<ImageType>;
+        ImageType::Pointer outputImage = ImageType::New();
+        outputImage->SetRegions(region);
+        outputImage->SetSpacing(spacing);
+        outputImage->SetOrigin(origin);
+        outputImage->SetDirection(direction);
+        outputImage->Allocate();
+        
+        // 复制分割结果到ITK图像
+        itk::ImageRegionIterator<ImageType> outIt(outputImage, region);
+        short* resultPtr = toothLabelMask.data();
+        for (outIt.GoToBegin(); !outIt.IsAtEnd(); ++outIt) {
+            outIt.Set(*resultPtr++);
+        }
+        
+        // 写入文件
+        WriterType::Pointer writer = WriterType::New();
+        writer->SetFileName(resultPath);
+        writer->SetInput(outputImage);
+        writer->Update();
+        
+        cout << "Results saved to: " << resultPath << endl;
+        
+        // 清理资源
+        DentalCbctSegAI_ReleseObj(AI_Hdl);
+        free(srcData);
+        free(toothSegData);
+        
+        cout << "\\nProgram completed successfully!" << endl;
+        system("pause");
+        return 0;
+        
+    } catch (const exception& e) {
+        cout << "Error: " << e.what() << endl;
+        system("pause");
+        return -1;
+    }
 }
-

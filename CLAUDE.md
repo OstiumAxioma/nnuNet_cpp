@@ -91,7 +91,24 @@ Status codes:
 3. Path issues: The executable expects to run from build\bin\Release\ with resources in the project root
 4. Model path: Must use wide character string (wchar_t*) when calling DentalCbctSegAI_SetModelPath
 
+## Current Development Priority: 硬编码参数解除
+
+### 关键问题
+当前静态库存在严重的硬编码参数问题，导致不同模型无法正确运行。特别是：
+- **patch_size硬编码**: {160,160,96} vs 模型期望 {128,128,128}
+- **num_classes硬编码**: 3 vs 模型期望 4
+- **归一化方法硬编码**: CTNormalization vs 应该使用 ZScoreNormalization
+
+### 需要实现的功能
+1. **JSON配置文件支持**: 从`checkpoint_best_params.json`读取模型参数
+2. **新API接口**: 添加`DentalCbctSegAI_SetConfigFile()`函数
+3. **参数验证**: 模型加载时验证输入输出尺寸匹配
+
+### 详细分析文档
+参见 `hardcoded_parameters_analysis.md` 获取完整的参数清单和解决方案。
+
 ## Code Analysis Memories
 
 - 不要使用模型文件名来分析代码，kneeseg_test仅仅是名称，并不以意味着它不能用于牙齿分割或其它分割
 - 不要自己运行任何脚本，要求用户手动运行并粘贴结果
+- **硬编码参数是当前最严重的问题**：必须首先解决参数配置化，然后才能支持多种模型

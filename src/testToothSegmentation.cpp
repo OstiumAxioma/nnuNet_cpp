@@ -65,32 +65,14 @@
 using namespace std;
 using namespace cimg_library;
 
-// 简单的JSON配置结构
-struct ModelConfig {
-    vector<int> all_labels;
-    int num_classes;
-    int num_input_channels;
-    vector<int> patch_size;
-    vector<float> target_spacing;
-    vector<int> transpose_forward;
-    vector<int> transpose_backward;
-    float mean;
-    float std;
-    float min_val;
-    float max_val;
-    float percentile_00_5;
-    float percentile_99_5;
-    string normalization_scheme;
-    bool use_mask_for_norm;
-    bool use_tta;
-};
+// testToothSegmentation现在只负责文件读取，JSON解析已移至静态库
 
-// 简单的JSON解析函数
-bool parseJsonConfig(const string& jsonPath, ModelConfig& config) {
+// 读取JSON文件内容
+string readJsonFile(const string& jsonPath) {
     ifstream file(jsonPath);
     if (!file.is_open()) {
         cout << "Error: Cannot open config file: " << jsonPath << endl;
-        return false;
+        return "";
     }
     
     string line;
@@ -100,213 +82,7 @@ bool parseJsonConfig(const string& jsonPath, ModelConfig& config) {
     }
     file.close();
     
-    try {
-        // 解析num_classes
-        size_t pos = jsonContent.find("\"num_classes\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find(":", pos) + 1;
-            size_t end = jsonContent.find(",", pos);
-            if (end == string::npos) end = jsonContent.find("}", pos);
-            string value = jsonContent.substr(pos, end - pos);
-            // 移除空格
-            value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-            config.num_classes = stoi(value);
-        }
-        
-        // 解析num_input_channels
-        pos = jsonContent.find("\"num_input_channels\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find(":", pos) + 1;
-            size_t end = jsonContent.find(",", pos);
-            if (end == string::npos) end = jsonContent.find("}", pos);
-            string value = jsonContent.substr(pos, end - pos);
-            value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-            config.num_input_channels = stoi(value);
-        }
-        
-        // 解析patch_size数组
-        pos = jsonContent.find("\"patch_size\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find("[", pos);
-            size_t end = jsonContent.find("]", pos);
-            string arrayStr = jsonContent.substr(pos + 1, end - pos - 1);
-            
-            // 解析数组元素
-            stringstream ss(arrayStr);
-            string item;
-            config.patch_size.clear();
-            while (getline(ss, item, ',')) {
-                item.erase(remove_if(item.begin(), item.end(), ::isspace), item.end());
-                if (!item.empty()) {
-                    config.patch_size.push_back(stoi(item));
-                }
-            }
-        }
-        
-        // 解析target_spacing数组
-        pos = jsonContent.find("\"target_spacing\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find("[", pos);
-            size_t end = jsonContent.find("]", pos);
-            string arrayStr = jsonContent.substr(pos + 1, end - pos - 1);
-            
-            stringstream ss(arrayStr);
-            string item;
-            config.target_spacing.clear();
-            while (getline(ss, item, ',')) {
-                item.erase(remove_if(item.begin(), item.end(), ::isspace), item.end());
-                if (!item.empty()) {
-                    config.target_spacing.push_back(stof(item));
-                }
-            }
-        }
-        
-        // 解析transpose_forward数组
-        pos = jsonContent.find("\"transpose_forward\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find("[", pos);
-            size_t end = jsonContent.find("]", pos);
-            string arrayStr = jsonContent.substr(pos + 1, end - pos - 1);
-            
-            stringstream ss(arrayStr);
-            string item;
-            config.transpose_forward.clear();
-            while (getline(ss, item, ',')) {
-                item.erase(remove_if(item.begin(), item.end(), ::isspace), item.end());
-                if (!item.empty()) {
-                    config.transpose_forward.push_back(stoi(item));
-                }
-            }
-        }
-        
-        // 解析transpose_backward数组
-        pos = jsonContent.find("\"transpose_backward\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find("[", pos);
-            size_t end = jsonContent.find("]", pos);
-            string arrayStr = jsonContent.substr(pos + 1, end - pos - 1);
-            
-            stringstream ss(arrayStr);
-            string item;
-            config.transpose_backward.clear();
-            while (getline(ss, item, ',')) {
-                item.erase(remove_if(item.begin(), item.end(), ::isspace), item.end());
-                if (!item.empty()) {
-                    config.transpose_backward.push_back(stoi(item));
-                }
-            }
-        }
-        
-        // 解析intensity_properties中的第一个通道数据
-        pos = jsonContent.find("\"intensity_properties\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find("\"0\":", pos);
-            if (pos != string::npos) {
-                size_t objStart = jsonContent.find("{", pos);
-                size_t objEnd = jsonContent.find("}", objStart);
-                string objStr = jsonContent.substr(objStart, objEnd - objStart + 1);
-                
-                // 解析mean
-                size_t meanPos = objStr.find("\"mean\":");
-                if (meanPos != string::npos) {
-                    meanPos = objStr.find(":", meanPos) + 1;
-                    size_t end = objStr.find(",", meanPos);
-                    if (end == string::npos) end = objStr.find("}", meanPos);
-                    string value = objStr.substr(meanPos, end - meanPos);
-                    value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-                    config.mean = stof(value);
-                }
-                
-                // 解析std
-                size_t stdPos = objStr.find("\"std\":");
-                if (stdPos != string::npos) {
-                    stdPos = objStr.find(":", stdPos) + 1;
-                    size_t end = objStr.find(",", stdPos);
-                    if (end == string::npos) end = objStr.find("}", stdPos);
-                    string value = objStr.substr(stdPos, end - stdPos);
-                    value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-                    config.std = stof(value);
-                }
-                
-                // 解析min
-                size_t minPos = objStr.find("\"min\":");
-                if (minPos != string::npos) {
-                    minPos = objStr.find(":", minPos) + 1;
-                    size_t end = objStr.find(",", minPos);
-                    if (end == string::npos) end = objStr.find("}", minPos);
-                    string value = objStr.substr(minPos, end - minPos);
-                    value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-                    config.min_val = stof(value);
-                }
-                
-                // 解析max
-                size_t maxPos = objStr.find("\"max\":");
-                if (maxPos != string::npos) {
-                    maxPos = objStr.find(":", maxPos) + 1;
-                    size_t end = objStr.find(",", maxPos);
-                    if (end == string::npos) end = objStr.find("}", maxPos);
-                    string value = objStr.substr(maxPos, end - maxPos);
-                    value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-                    config.max_val = stof(value);
-                }
-                
-                // 解析percentile_00_5
-                size_t p005Pos = objStr.find("\"percentile_00_5\":");
-                if (p005Pos != string::npos) {
-                    p005Pos = objStr.find(":", p005Pos) + 1;
-                    size_t end = objStr.find(",", p005Pos);
-                    if (end == string::npos) end = objStr.find("}", p005Pos);
-                    string value = objStr.substr(p005Pos, end - p005Pos);
-                    value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-                    config.percentile_00_5 = stof(value);
-                }
-                
-                // 解析percentile_99_5
-                size_t p995Pos = objStr.find("\"percentile_99_5\":");
-                if (p995Pos != string::npos) {
-                    p995Pos = objStr.find(":", p995Pos) + 1;
-                    size_t end = objStr.find(",", p995Pos);
-                    if (end == string::npos) end = objStr.find("}", p995Pos);
-                    string value = objStr.substr(p995Pos, end - p995Pos);
-                    value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-                    config.percentile_99_5 = stof(value);
-                }
-            }
-        }
-        
-        // 解析normalization_schemes
-        pos = jsonContent.find("\"normalization_schemes\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find("[", pos);
-            size_t end = jsonContent.find("]", pos);
-            string arrayStr = jsonContent.substr(pos + 1, end - pos - 1);
-            
-            // 提取第一个scheme
-            size_t quoteStart = arrayStr.find("\"");
-            if (quoteStart != string::npos) {
-                size_t quoteEnd = arrayStr.find("\"", quoteStart + 1);
-                config.normalization_scheme = arrayStr.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
-            }
-        }
-        
-        // 解析use_tta
-        pos = jsonContent.find("\"use_tta\":");
-        if (pos != string::npos) {
-            pos = jsonContent.find(":", pos) + 1;
-            size_t end = jsonContent.find(",", pos);
-            if (end == string::npos) end = jsonContent.find("}", pos);
-            string value = jsonContent.substr(pos, end - pos);
-            value.erase(remove_if(value.begin(), value.end(), ::isspace), value.end());
-            config.use_tta = (value == "true");
-        }
-        
-        cout << "Successfully parsed config file: " << jsonPath << endl;
-        return true;
-        
-    } catch (const exception& e) {
-        cout << "Error parsing JSON config: " << e.what() << endl;
-        return false;
-    }
+    return jsonContent;
 }
 
 // 函数：根据扩展名过滤并列出目录中的文件，让用户选择
@@ -503,23 +279,17 @@ int main()
 			return -1;
 		}
 		
-		//===== 解析JSON配置文件 =====
-		cout << "\n======= Parsing Configuration =======" << endl;
-		ModelConfig config;
-		if (!parseJsonConfig(configPath, config)) {
-			cout << "Error: Failed to parse config file, program exit!" << endl;
+		//===== 读取JSON配置文件内容 =====
+		cout << "\n======= Loading Configuration =======" << endl;
+		string jsonContent = readJsonFile(configPath);
+		if (jsonContent.empty()) {
+			cout << "Error: Failed to read config file, program exit!" << endl;
 			system("pause");
 			return -1;
 		}
 		
-		// 显示解析的配置信息
-		cout << "Configuration loaded successfully:" << endl;
-		cout << "  - num_classes: " << config.num_classes << endl;
-		cout << "  - num_input_channels: " << config.num_input_channels << endl;
-		cout << "  - patch_size: [" << config.patch_size[0] << ", " << config.patch_size[1] << ", " << config.patch_size[2] << "]" << endl;
-		cout << "  - target_spacing: [" << config.target_spacing[0] << ", " << config.target_spacing[1] << ", " << config.target_spacing[2] << "]" << endl;
-		cout << "  - normalization_scheme: " << config.normalization_scheme << endl;
-		cout << "  - intensity mean: " << config.mean << ", std: " << config.std << endl;
+		cout << "Configuration file loaded: " << configPath << endl;
+		cout << "JSON content length: " << jsonContent.length() << " characters" << endl;
 		std::cout << "正在使用ITK加载HDR图像文件..." << std::endl;
 		std::cout << "文件路径: " << inputHdrPath << std::endl;
 		
@@ -638,40 +408,21 @@ int main()
 	//===== 配置模型参数 =====
 	cout << "\n======= Configuring Model Parameters =======" << endl;
 	
-	// 设置patch size
-	AI_INT status_patch = DentalCbctSegAI_SetPatchSize(AI_Hdl, config.patch_size[0], config.patch_size[1], config.patch_size[2]);
-	cout << "SetPatchSize(" << config.patch_size[0] << ", " << config.patch_size[1] << ", " << config.patch_size[2] << ") status: " << status_patch << endl;
+	// 使用新的JSON配置接口
+	AI_INT config_status = DentalCbctSegAI_SetConfigFromJson(AI_Hdl, jsonContent.c_str());
+	cout << "SetConfigFromJson status: " << config_status << endl;
 	
-	// 设置类别数
-	AI_INT status_classes = DentalCbctSegAI_SetNumClasses(AI_Hdl, config.num_classes);
-	cout << "SetNumClasses(" << config.num_classes << ") status: " << status_classes << endl;
-	
-	// 设置输入通道数
-	AI_INT status_channels = DentalCbctSegAI_SetInputChannels(AI_Hdl, config.num_input_channels);
-	cout << "SetInputChannels(" << config.num_input_channels << ") status: " << status_channels << endl;
-	
-	// 设置目标spacing
-	AI_INT status_spacing = DentalCbctSegAI_SetTargetSpacing(AI_Hdl, config.target_spacing[0], config.target_spacing[1], config.target_spacing[2]);
-	cout << "SetTargetSpacing(" << config.target_spacing[0] << ", " << config.target_spacing[1] << ", " << config.target_spacing[2] << ") status: " << status_spacing << endl;
-	
-	// 设置transpose设置
-	AI_INT status_transpose = DentalCbctSegAI_SetTransposeSettings(AI_Hdl, 
-		config.transpose_forward[0], config.transpose_forward[1], config.transpose_forward[2],
-		config.transpose_backward[0], config.transpose_backward[1], config.transpose_backward[2]);
-	cout << "SetTransposeSettings status: " << status_transpose << endl;
-	
-	// 设置归一化类型
-	AI_INT status_norm = DentalCbctSegAI_SetNormalizationType(AI_Hdl, config.normalization_scheme.c_str());
-	cout << "SetNormalizationType(" << config.normalization_scheme << ") status: " << status_norm << endl;
-	
-	// 设置强度属性
-	AI_INT status_intensity = DentalCbctSegAI_SetIntensityProperties(AI_Hdl, 
-		config.mean, config.std, config.min_val, config.max_val, config.percentile_00_5, config.percentile_99_5);
-	cout << "SetIntensityProperties status: " << status_intensity << endl;
-	
-	// 设置mirroring
-	AI_INT status_mirror = DentalCbctSegAI_SetUseMirroring(AI_Hdl, false); // 默认false
-	cout << "SetUseMirroring(false) status: " << status_mirror << endl;
+	if (config_status != DentalCbctSegAI_STATUS_SUCCESS) {
+		cout << "Error: Failed to set configuration from JSON!" << endl;
+		// 释放资源
+		if (AI_Hdl) DentalCbctSegAI_ReleseObj(AI_Hdl);
+		if (srcData) free(srcData);
+		if (toothSegData) free(toothSegData);
+		system("pause");
+		return -1;
+	} else {
+		cout << "Model configuration set successfully from JSON!" << endl;
+	}
 
 	std::cout << "\nSetting model path..." << std::endl;
 	std::cout << "模型文件: " << modelPath << std::endl;

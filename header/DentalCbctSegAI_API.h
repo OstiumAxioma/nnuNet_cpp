@@ -102,6 +102,9 @@ DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetIntensityProperties(AI_HANDL
                                                                          AI_FLOAT percentile_00_5, AI_FLOAT percentile_99_5);
 DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetUseMirroring(AI_HANDLE AI_Hdl, AI_BOOL use_mirroring);
 
+// ���ӣ�JSON�����ӿ�
+DentalCbctSegAI_API AI_INT       DentalCbctSegAI_SetConfigFromJson(AI_HANDLE AI_Hdl, const char* jsonContent);
+
 // �ͷ���Դ
 DentalCbctSegAI_API AI_VOID      DentalCbctSegAI_ReleseObj(AI_HANDLE AI_Hdl);
 

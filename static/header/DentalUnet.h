@@ -14,6 +14,7 @@
 #include "../../lib/CImg/CImg.h"
 
 #include "DentalCbctSegAI_API.h"
+#include "ConfigParser.h"
 
 // ITK headers for image I/O
 #include <itkImage.h>
@@ -79,6 +80,9 @@ public:
 	void    setIntensityProperties(float mean, float std, float min_val, float max_val,
 	                             float percentile_00_5, float percentile_99_5);
 	void    setUseMirroring(bool use_mirroring);
+	
+	// 新增：JSON配置接口
+	bool    setConfigFromJsonString(const char* jsonContent);
 
 	AI_INT  performInference(AI_DataInfo *srcData); //ִ�зָ�����
 
@@ -140,6 +144,9 @@ private:
 
 	//ģ�����ò���
 	nnUNetConfig unetConfig;
+	
+	// JSON����������
+	ConfigParser configParser;
 	
 	// �������·��
 	std::wstring preprocessOutputPath;

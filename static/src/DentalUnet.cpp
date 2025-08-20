@@ -134,6 +134,63 @@ void DentalUnet::setUseMirroring(bool use_mirroring)
 	unetConfig.use_mirroring = use_mirroring;
 }
 
+// 新增：JSON配置接口实现
+bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
+{
+	if (jsonContent == nullptr) {
+		return false;
+	}
+	
+	ModelConfig config;
+	if (configParser.parseJsonString(std::string(jsonContent), config)) {
+		// 应用配置到unetConfig
+		unetConfig.patch_size.clear();
+		if (config.patch_size.size() >= 3) {
+			unetConfig.patch_size.push_back(config.patch_size[0]);
+			unetConfig.patch_size.push_back(config.patch_size[1]);
+			unetConfig.patch_size.push_back(config.patch_size[2]);
+		}
+		
+		unetConfig.voxel_spacing.clear();
+		if (config.target_spacing.size() >= 3) {
+			unetConfig.voxel_spacing.push_back(config.target_spacing[0]);
+			unetConfig.voxel_spacing.push_back(config.target_spacing[1]);
+			unetConfig.voxel_spacing.push_back(config.target_spacing[2]);
+		}
+		
+		unetConfig.transpose_forward.clear();
+		if (config.transpose_forward.size() >= 3) {
+			unetConfig.transpose_forward.push_back(config.transpose_forward[0]);
+			unetConfig.transpose_forward.push_back(config.transpose_forward[1]);
+			unetConfig.transpose_forward.push_back(config.transpose_forward[2]);
+		}
+		
+		unetConfig.transpose_backward.clear();
+		if (config.transpose_backward.size() >= 3) {
+			unetConfig.transpose_backward.push_back(config.transpose_backward[0]);
+			unetConfig.transpose_backward.push_back(config.transpose_backward[1]);
+			unetConfig.transpose_backward.push_back(config.transpose_backward[2]);
+		}
+		
+		unetConfig.num_classes = config.num_classes;
+		unetConfig.input_channels = config.num_input_channels;
+		unetConfig.normalization_type = config.normalization_scheme;
+		unetConfig.use_mirroring = config.use_tta;
+		
+		unetConfig.mean_std_HU.clear();
+		unetConfig.mean_std_HU.push_back(config.mean);
+		unetConfig.mean_std_HU.push_back(config.std);
+		
+		unetConfig.min_max_HU.clear();
+		unetConfig.min_max_HU.push_back(config.min_val);
+		unetConfig.min_max_HU.push_back(config.max_val);
+		
+		return true;
+	}
+	
+	return false;
+}
+
 
 void  DentalUnet::setDnnOptions()
 {

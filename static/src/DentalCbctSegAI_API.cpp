@@ -179,6 +179,21 @@ DentalCbctSegAI_API AI_INT DentalCbctSegAI_SetUseMirroring(AI_HANDLE AI_Hdl, AI_
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
 
+// 新增：JSON配置接口实现
+DentalCbctSegAI_API AI_INT DentalCbctSegAI_SetConfigFromJson(AI_HANDLE AI_Hdl, const char* jsonContent)
+{
+	if (AI_Hdl == NULL)
+		return DentalCbctSegAI_STATUS_HANDLE_NULL;
+		
+	if (jsonContent == NULL)
+		return DentalCbctSegAI_STATUS_FAIED;
+
+	DentalUnet *pAIObj = reinterpret_cast<DentalUnet *>(AI_Hdl);
+	bool result = pAIObj->setConfigFromJsonString(jsonContent);
+	
+	return result ? DentalCbctSegAI_STATUS_SUCCESS : DentalCbctSegAI_STATUS_FAIED;
+}
+
 
 DentalCbctSegAI_API AI_VOID      DentalCbctSegAI_ReleseObj(AI_HANDLE AI_Hdl)
 {

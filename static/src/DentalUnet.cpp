@@ -588,8 +588,8 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		throw std::runtime_error("Patch size should be 3D (depth, height, width)");
 	}
 
-	// ?? (1, 1, D, H, W)
-	std::vector<int64_t> input_tensor_shape = { 1, 1, config.patch_size[2], config.patch_size[1], config.patch_size[0] };
+	// ONNX tensor shape: (batch, channel, depth, height, width)
+	std::vector<int64_t> input_tensor_shape = { 1, 1, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
 
 	int depth = normalized_volume.depth();
 	int width = normalized_volume.width();
@@ -601,24 +601,25 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	
 	// 使用与Python nnUNet相同的tile计算逻辑
 	// 直接计算步长：step = patch_size * step_size_ratio
-	actualStepSize[0] = config.patch_size[0] * step_size_ratio;
-	actualStepSize[1] = config.patch_size[1] * step_size_ratio;
-	actualStepSize[2] = config.patch_size[2] * step_size_ratio;
+	// actualStepSize[0] = X轴 (width), actualStepSize[1] = Y轴 (height), actualStepSize[2] = Z轴 (depth)
+	actualStepSize[0] = config.patch_size[2] * step_size_ratio;  // width
+	actualStepSize[1] = config.patch_size[1] * step_size_ratio;  // height
+	actualStepSize[2] = config.patch_size[0] * step_size_ratio;  // depth
 	
 	// 计算步数：确保至少有1步，即使维度小于patch size
-	int X_num_steps = std::max(1, (int)ceil(float(width - config.patch_size[0]) / actualStepSize[0]) + 1);
+	int X_num_steps = std::max(1, (int)ceil(float(width - config.patch_size[2]) / actualStepSize[0]) + 1);
 	int Y_num_steps = std::max(1, (int)ceil(float(height - config.patch_size[1]) / actualStepSize[1]) + 1);
-	int Z_num_steps = std::max(1, (int)ceil(float(depth - config.patch_size[2]) / actualStepSize[2]) + 1);
+	int Z_num_steps = std::max(1, (int)ceil(float(depth - config.patch_size[0]) / actualStepSize[2]) + 1);
 	
 	// 当维度小于patch size时，调整步数为1
-	if (width <= config.patch_size[0]) X_num_steps = 1;
+	if (width <= config.patch_size[2]) X_num_steps = 1;
 	if (height <= config.patch_size[1]) Y_num_steps = 1;
-	if (depth <= config.patch_size[2]) Z_num_steps = 1;
+	if (depth <= config.patch_size[0]) Z_num_steps = 1;
 
 	if (NETDEBUG_FLAG) {
 		std::cout << "[DEBUG] Tile calculation:" << endl;
 		std::cout << "  Volume dimensions: " << width << "x" << height << "x" << depth << endl;
-		std::cout << "  Patch size: " << config.patch_size[0] << "x" << config.patch_size[1] << "x" << config.patch_size[2] << endl;
+		std::cout << "  Patch size: " << config.patch_size[2] << "x" << config.patch_size[1] << "x" << config.patch_size[0] << " (WxHxD)" << endl;
 		std::cout << "  Step size ratio: " << step_size_ratio << endl;
 		std::cout << "  Actual step sizes: X=" << actualStepSize[0] << ", Y=" << actualStepSize[1] << ", Z=" << actualStepSize[2] << endl;
 		std::cout << "  Number of steps: X=" << X_num_steps << ", Y=" << Y_num_steps << ", Z=" << Z_num_steps << endl;
@@ -630,9 +631,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	CImg<float> count_vol = CImg<float>(width, height, depth, 1, 0.f);
 	//std::cout << "predSegProbVolume shape: " << depth << width << height << endl;
 
-	//CImg<float> input_patch = CImg<float>(config.patch_size[0], config.patch_size[1], config.patch_size[2], 1, 0.f);
-	CImg<float> win_pob = CImg<float>(config.patch_size[0], config.patch_size[1], config.patch_size[2], config.num_classes, 0.f);
-	CImg<float> gaussisan_weight = CImg<float>(config.patch_size[0], config.patch_size[1], config.patch_size[2], 1, 0.f);
+	//CImg<float> input_patch = CImg<float>(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.f);
+	CImg<float> win_pob = CImg<float>(config.patch_size[2], config.patch_size[1], config.patch_size[0], config.num_classes, 0.f);
+	CImg<float> gaussisan_weight = CImg<float>(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.f);
 	create_3d_gaussian_kernel(gaussisan_weight, config.patch_size);
 
 	size_t input_patch_voxel_numel = config.patch_size[0] * config.patch_size[1] * config.patch_size[2];
@@ -644,11 +645,11 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	{
 		int lb_z = (int)std::round(sz * actualStepSize[2]);
 		// 确保不超出边界
-		if (lb_z + config.patch_size[2] > depth) {
-			lb_z = depth - config.patch_size[2];
+		if (lb_z + config.patch_size[0] > depth) {
+			lb_z = depth - config.patch_size[0];
 		}
 		lb_z = std::max(0, lb_z);
-		int ub_z = lb_z + config.patch_size[2] - 1;
+		int ub_z = lb_z + config.patch_size[0] - 1;
 
 		for (int sy = 0; sy < Y_num_steps; sy++)
 		{
@@ -664,11 +665,11 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 			{
 				int lb_x = (int)std::round(sx * actualStepSize[0]);
 				// 确保不超出边界
-				if (lb_x + config.patch_size[0] > width) {
-					lb_x = width - config.patch_size[0];
+				if (lb_x + config.patch_size[2] > width) {
+					lb_x = width - config.patch_size[2];
 				}
 				lb_x = std::max(0, lb_x);
-				int ub_x = lb_x + config.patch_size[0] - 1;
+				int ub_x = lb_x + config.patch_size[2] - 1;
 
 				patch_count += 1;
 				if (NETDEBUG_FLAG)
@@ -682,8 +683,8 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					//std::cout << "input_patch mean: " << input_patch.mean() << endl;
 					//std::cout << "input_patch variance: " << input_patch.variance() << endl;
 					std::cout << "input_patch dimensions: " << input_patch.width() << "x" << input_patch.height() << "x" << input_patch.depth() << endl;
-					if (input_patch.width() != config.patch_size[0] || input_patch.height() != config.patch_size[1] || input_patch.depth() != config.patch_size[2]) {
-						std::cerr << "[ERROR] Patch size mismatch! Expected: " << config.patch_size[0] << "x" << config.patch_size[1] << "x" << config.patch_size[2] << endl;
+					if (input_patch.width() != config.patch_size[2] || input_patch.height() != config.patch_size[1] || input_patch.depth() != config.patch_size[0]) {
+						std::cerr << "[ERROR] Patch size mismatch! Expected: " << config.patch_size[2] << "x" << config.patch_size[1] << "x" << config.patch_size[0] << " (WxHxD)" << endl;
 						return DentalCbctSegAI_STATUS_FAIED;
 					}
 				} catch (const CImgException& e) {

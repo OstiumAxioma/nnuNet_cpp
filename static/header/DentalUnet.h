@@ -8,10 +8,10 @@
 #include <stdlib.h>
 #include <math.h>
 #include <map>
-#include "../../lib/onnxruntime/include/onnxruntime_cxx_api.h"
+#include "onnxruntime_cxx_api.h"
 
 #define cimg_display_type 2
-#include "../../lib/CImg/CImg.h"
+#include "CImg.h"
 
 #include "DentalCbctSegAI_API.h"
 #include "ConfigParser.h"
@@ -69,7 +69,7 @@ public:
 
 	void    setStepSizeRatio(float ratio);
 	
-	// 新增：参数设置接口
+	// 新增：参数设置接�?
 	void    setPatchSize(int64_t x, int64_t y, int64_t z);
 	void    setNumClasses(int classes);
 	void    setInputChannels(int channels);
@@ -91,7 +91,7 @@ public:
 	void    setDnnOptions(); //�������ã��Ƿ�cuda��opengl����չ��
 	void    setAlgParameter();
 	
-	// �����������·��
+	// �����������·��?
 	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
 
 private:
@@ -111,21 +111,21 @@ private:
 
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
-	// 新增：保存原始spacing（从文件读取的真实物理spacing）
+	// 新增：保存原始spacing（从文件读取的真实物理spacing�?
 	std::vector<float> original_voxel_spacing;
 	std::vector<float> transposed_original_voxel_spacing;
 	
-	// 新增：保存图像元数据（origin, spacing, direction）
+	// 新增：保存图像元数据（origin, spacing, direction�?
 	struct ImageMetadata {
 		double origin[3];
 		double spacing[3];
 		double direction[9];  // 3x3 direction matrix stored as 1D array
 		
 		ImageMetadata() {
-			// 默认值
+			// 默认�?
 			origin[0] = origin[1] = origin[2] = 0.0;
 			spacing[0] = spacing[1] = spacing[2] = 1.0;
-			// 默认方向为单位矩阵
+			// 默认方向为单位矩�?
 			direction[0] = direction[4] = direction[8] = 1.0;
 			direction[1] = direction[2] = direction[3] = 0.0;
 			direction[5] = direction[6] = direction[7] = 0.0;
@@ -148,7 +148,7 @@ private:
 	// JSON����������
 	ConfigParser configParser;
 	
-	// �������·��
+	// �������·��?
 	std::wstring preprocessOutputPath;
 	std::wstring modelOutputPath;
 	std::wstring postprocessOutputPath;

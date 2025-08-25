@@ -1,0 +1,12 @@
+-I${workspaceFolder}/static/header
+-I${workspaceFolder}/lib/onnxruntime/include
+-I${workspaceFolder}/lib/CImg
+-ID:/Compile/ITK-5.4.3/include/ITK-5.4
+-std=c++17
+-D_DEBUG
+-DUNICODE
+-D_UNICODE
+-DDENTALCBCTSEGDLL_EXPORTS
+-D_WINDOWS
+-D_USRDLL
+-DNOMINMAX

@@ -1,5 +1,16 @@
 {
     "cmake.ignoreCMakeListsMissing": true,
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/static/header",
+        "${workspaceFolder}/lib/onnxruntime/include",
+        "${workspaceFolder}/lib/CImg",
+        "D:/Compile/ITK-5.4.3/include/ITK-5.4"
+    ],
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.cStandard": "c17",
+    "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.associations": {
         "algorithm": "cpp",
         "array": "cpp",

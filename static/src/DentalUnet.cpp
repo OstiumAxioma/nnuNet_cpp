@@ -389,7 +389,6 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		throw std::runtime_error("Spacing dimensions mismatch");
 	}
 
-	// ?????????
 	// bool is_volume_scaled = false;  // 注释掉条件判断，改为始终缩放
 	bool is_volume_scaled = true;  // 使用与Python相同的逻辑：始终进行缩放
 	////input_voxel_spacing = {voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth 

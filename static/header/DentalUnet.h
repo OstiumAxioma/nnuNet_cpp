@@ -52,10 +52,18 @@ struct nnUNetConfig {
 	std::string task_type; //"classification, segmentation, regression, detection"
 	std::vector<float> min_max_HU;
 	std::vector<float> mean_std_HU;
+	
+	// 直接访问的intensity properties
+	float mean;
+	float std;
 
 	bool use_mirroring;
 };
 
+// 预处理相关结构体定义
+struct CropBBox {
+	int x_min, x_max, y_min, y_max, z_min, z_max;
+};
 
 class DentalUnet
 {
@@ -69,7 +77,7 @@ public:
 
 	void    setStepSizeRatio(float ratio);
 	
-	// 新增：参数设置接�?
+	// 新增：参数设置接�?
 	void    setPatchSize(int64_t x, int64_t y, int64_t z);
 	void    setNumClasses(int classes);
 	void    setInputChannels(int channels);
@@ -91,7 +99,7 @@ public:
 	void    setDnnOptions(); //�������ã��Ƿ�cuda��opengl����չ��
 	void    setAlgParameter();
 	
-	// �����������·��?
+	// �����������·��?
 	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
 
 private:
@@ -104,6 +112,9 @@ private:
 
 	float intensity_mean;
 	float intensity_std;
+	
+	// 预处理相关成员变量
+	CropBBox crop_bbox;  // 保存裁剪边界信息
 
 	int Width0;
 	int Height0;
@@ -111,21 +122,21 @@ private:
 
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
-	// 新增：保存原始spacing（从文件读取的真实物理spacing�?
+	// 新增：保存原始spacing（从文件读取的真实物理spacing�?
 	std::vector<float> original_voxel_spacing;
 	std::vector<float> transposed_original_voxel_spacing;
 	
-	// 新增：保存图像元数据（origin, spacing, direction�?
+	// 新增：保存图像元数据（origin, spacing, direction�?
 	struct ImageMetadata {
 		double origin[3];
 		double spacing[3];
 		double direction[9];  // 3x3 direction matrix stored as 1D array
 		
 		ImageMetadata() {
-			// 默认�?
+			// 默认�?
 			origin[0] = origin[1] = origin[2] = 0.0;
 			spacing[0] = spacing[1] = spacing[2] = 1.0;
-			// 默认方向为单位矩�?
+			// 默认方向为单位矩�?
 			direction[0] = direction[4] = direction[8] = 1.0;
 			direction[1] = direction[2] = direction[3] = 0.0;
 			direction[5] = direction[6] = direction[7] = 0.0;
@@ -148,7 +159,7 @@ private:
 	// JSON����������
 	ConfigParser configParser;
 	
-	// �������·��?
+	// �������·��?
 	std::wstring preprocessOutputPath;
 	std::wstring modelOutputPath;
 	std::wstring postprocessOutputPath;
@@ -168,6 +179,9 @@ private:
 	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
 	void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);
 	CImg<short> argmax_spectrum(const CImg<float>& input);
+	
+	// 预处理步骤函数
+	CImg<short> crop_to_nonzero(const CImg<short>& input, CropBBox& bbox);
 	
 	// �����������ļ��ķ���
 	void    savePreprocessedData(const CImg<float>& data, const std::wstring& filename);

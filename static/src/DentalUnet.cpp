@@ -130,7 +130,7 @@ void DentalUnet::setIntensityProperties(float mean, float std, float min_val, fl
 {
 	unetConfig.mean_std_HU = { mean, std };
 	unetConfig.min_max_HU = { min_val, max_val };
-	// 注意：percentile值暂时存储在mean_std_HU中，实际使用时需要根据normalization_type决定
+	// percentile值暂时存储在mean_std_HU中，实际使用时需要根据normalization_type决定
 }
 
 void DentalUnet::setUseMirroring(bool use_mirroring)
@@ -468,10 +468,8 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 	int infer_status = segModelInfer(unetConfig, cropped_volume);
 	std::cout << "infer_status: " << infer_status << endl;
 
-	if (infer_status == DentalCbctSegAI_STATUS_SUCCESS) {
-		// 恢复转置
-		output_seg_mask.permute_axes(unetConfig.cimg_transpose_backward);
-	}
+	// 不在这里恢复转置，将在getSegMask的最后步骤中处理
+	// 保持数据在转置后的坐标系中，以便正确处理裁剪恢复
 
 	return infer_status;
 }
@@ -623,12 +621,8 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		saveModelOutput(predicted_output_prob, L"model_output_probability");
 	}
 
-	output_seg_mask = argmax_spectrum(predicted_output_prob);
-
-	// 保存后处理数据
-	if (saveIntermediateResults) {
-		savePostprocessedData(output_seg_mask, L"postprocessed_segmentation_mask");
-	}
+	// 不在这里执行argmax，保持概率图供后续处理
+	// argmax将在getSegMask中的后处理流程中执行
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
@@ -1012,13 +1006,32 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 
 AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 {
-	std::cout << "[DEBUG] getSegMask called" << endl;
+	std::cout << "[DEBUG] getSegMask called - performing post-processing" << endl;
 	std::cout << "[DEBUG] Original dimensions: " << Width0 << "x" << Height0 << "x" << Depth0 << endl;
-	std::cout << "[DEBUG] output_seg_mask dimensions: " << output_seg_mask.width() << "x" << output_seg_mask.height() << "x" << output_seg_mask.depth() << endl;
+	std::cout << "[DEBUG] Probability volume dimensions: " << predicted_output_prob.width() 
+	          << "x" << predicted_output_prob.height() << "x" << predicted_output_prob.depth() 
+	          << "x" << predicted_output_prob.spectrum() << " (spectrum=" << predicted_output_prob.spectrum() << ")" << endl;
 	
-	// 检查output_seg_mask是否为裁剪后的尺寸
+	// 步骤1：对概率图执行argmax（在转置后的坐标系中）
+	std::cout << "[DEBUG] Step 1: Performing argmax on probability volume" << endl;
+	output_seg_mask = argmax_spectrum(predicted_output_prob);
+	std::cout << "[DEBUG] Segmentation mask dimensions after argmax: " 
+	          << output_seg_mask.width() << "x" << output_seg_mask.height() << "x" << output_seg_mask.depth() << endl;
+	
+	// 保存后处理数据（在转置撤销前）
+	if (saveIntermediateResults) {
+		savePostprocessedData(output_seg_mask, L"postprocessed_segmentation_mask_before_transpose");
+	}
+	
+	// 步骤2：撤销转置（恢复到原始坐标系）
+	std::cout << "[DEBUG] Step 2: Reverting transpose" << endl;
+	output_seg_mask.permute_axes(unetConfig.cimg_transpose_backward);
+	std::cout << "[DEBUG] Segmentation mask dimensions after transpose revert: " 
+	          << output_seg_mask.width() << "x" << output_seg_mask.height() << "x" << output_seg_mask.depth() << endl;
+	
+	// 步骤3：检查是否需要恢复裁剪
 	if (output_seg_mask.width() != Width0 || output_seg_mask.height() != Height0 || output_seg_mask.depth() != Depth0) {
-		std::cout << "[DEBUG] Need to restore cropped result to original size" << endl;
+		std::cout << "[DEBUG] Step 3: Restoring cropped result to original size" << endl;
 		
 		// 创建原始尺寸的结果mask，初始化为0
 		CImg<short> full_result(Width0, Height0, Depth0, 1, 0);
@@ -1107,6 +1120,14 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 	dstData->VoxelSpacingX = imageMetadata.spacing[0];
 	dstData->VoxelSpacingY = imageMetadata.spacing[1];
 	dstData->VoxelSpacingZ = imageMetadata.spacing[2];
+	
+	// 保存最终的后处理结果
+	if (saveIntermediateResults) {
+		// 需要从dstData创建一个CImg对象来保存
+		CImg<short> final_result(dstData->Width, dstData->Height, dstData->Depth, 1);
+		std::memcpy(final_result.data(), dstData->ptr_Data, dstData->Width * dstData->Height * dstData->Depth * sizeof(short));
+		savePostprocessedData(final_result, L"postprocessed_segmentation_mask_final");
+	}
 
 	std::cout << "[DEBUG] getSegMask completed" << endl;
 	return DentalCbctSegAI_STATUS_SUCCESS;
@@ -1213,7 +1234,7 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	using FloatImageType = itk::Image<float, 3>;
 	using WriterType = itk::ImageFileWriter<FloatImageType>;
 	
-	// 注意：对于多通道数据，我们可能需要分别保存每个通道
+	// 对于多通道数据，我们可能需要分别保存每个通道
 	// 目前，如果是概率图则保存第一个通道
 	CImg<float> dataToSave;
 	if (data.spectrum() > 1) {

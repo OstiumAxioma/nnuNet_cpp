@@ -280,10 +280,10 @@ int main()
         // 获取分割结果
         DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
         
-        // 使用ITK保存结果
+        // 使用ITK保存结果（NIfTI格式）
         string resultDir = "..\\\\..\\\\..\\\\result";
         _mkdir(resultDir.c_str());
-        string resultPath = resultDir + "\\\\finalLabelMask.hdr";
+        string resultPath = resultDir + "\\\\finalLabelMask.nii.gz";
         
         using WriterType = itk::ImageFileWriter<ImageType>;
         ImageType::Pointer outputImage = ImageType::New();

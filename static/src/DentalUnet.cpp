@@ -1117,9 +1117,9 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 {
 	if (!saveIntermediateResults || preprocessOutputPath.empty()) return;
 	
-	// Save as HDR format with ITK to preserve origin
-	std::wstring hdrPath = preprocessOutputPath + L"\\" + filename + L".hdr";
-	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	// Save as NIfTI format with ITK to preserve origin
+	std::wstring niftiPath = preprocessOutputPath + L"\\" + filename + L".nii.gz";
+	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	
 	// Define ITK types
 	using FloatImageType = itk::Image<float, 3>;
@@ -1166,7 +1166,7 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 	
 	// Write image
 	WriterType::Pointer writer = WriterType::New();
-	writer->SetFileName(narrowHdrPath);
+	writer->SetFileName(narrowNiftiPath);
 	writer->SetInput(image);
 	
 	try {
@@ -1196,7 +1196,7 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 	metaFile.close();
 	
 	std::cout << "[DEBUG] Saved preprocessed data:" << std::endl;
-	std::cout << "  - HDR format: " << narrowHdrPath << std::endl;
+	std::cout << "  - NIfTI format: " << narrowNiftiPath << std::endl;
 	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
 }
 
@@ -1205,9 +1205,9 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 {
 	if (!saveIntermediateResults || modelOutputPath.empty()) return;
 	
-	// Save as HDR format with ITK to preserve origin
-	std::wstring hdrPath = modelOutputPath + L"\\" + filename + L".hdr";
-	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	// Save as NIfTI format with ITK to preserve origin
+	std::wstring niftiPath = modelOutputPath + L"\\" + filename + L".nii.gz";
+	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	
 	// Define ITK types
 	using FloatImageType = itk::Image<float, 3>;
@@ -1263,7 +1263,7 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	
 	// Write image
 	WriterType::Pointer writer = WriterType::New();
-	writer->SetFileName(narrowHdrPath);
+	writer->SetFileName(narrowNiftiPath);
 	writer->SetInput(image);
 	
 	try {
@@ -1293,7 +1293,7 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	metaFile.close();
 	
 	std::cout << "[DEBUG] Saved model output:" << std::endl;
-	std::cout << "  - HDR format: " << narrowHdrPath << std::endl;
+	std::cout << "  - NIfTI format: " << narrowNiftiPath << std::endl;
 	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
 }
 
@@ -1302,9 +1302,9 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 {
 	if (!saveIntermediateResults || postprocessOutputPath.empty()) return;
 	
-	// Save as HDR format with ITK to preserve origin
-	std::wstring hdrPath = postprocessOutputPath + L"\\" + filename + L".hdr";
-	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
+	// Save as NIfTI format with ITK to preserve origin
+	std::wstring niftiPath = postprocessOutputPath + L"\\" + filename + L".nii.gz";
+	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	
 	// Define ITK types
 	using ShortImageType = itk::Image<short, 3>;
@@ -1351,7 +1351,7 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 	
 	// Write image
 	WriterType::Pointer writer = WriterType::New();
-	writer->SetFileName(narrowHdrPath);
+	writer->SetFileName(narrowNiftiPath);
 	writer->SetInput(image);
 	
 	try {
@@ -1381,7 +1381,7 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 	metaFile.close();
 	
 	std::cout << "[DEBUG] Saved postprocessed data:" << std::endl;
-	std::cout << "  - HDR format: " << narrowHdrPath << std::endl;
+	std::cout << "  - NIfTI format: " << narrowNiftiPath << std::endl;
 	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
 }
 
@@ -1397,10 +1397,10 @@ void DentalUnet::saveTile(const CImg<float>& tile, int tileIndex, int x, int y, 
 	ss << L"tile_" << std::setfill(L'0') << std::setw(4) << tileIndex 
 	   << L"_x" << x << L"_y" << y << L"_z" << z;
 	
-	// Save as HDR format
-	std::wstring hdrPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".hdr";
-	std::string narrowHdrPath(hdrPath.begin(), hdrPath.end());
-	tile.save(narrowHdrPath.c_str());
+	// Save as NIfTI format
+	std::wstring niftiPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".nii.gz";
+	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
+	tile.save(narrowNiftiPath.c_str());
 	
 	// Save as raw binary
 	std::wstring rawPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".raw";

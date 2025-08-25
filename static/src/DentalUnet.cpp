@@ -14,7 +14,7 @@ DentalUnet::DentalUnet()
 	use_gpu = true;
 
 	for (const auto& provider : providers) {
-		std::cout << "????Provider: " << provider << std::endl;
+		std::cout << "可用Provider: " << provider << std::endl;
 		if (provider == "CUDAExecutionProvider") {
 			use_gpu = true;
 		}
@@ -22,10 +22,10 @@ DentalUnet::DentalUnet()
 	//use_gpu = false;
 
 
-	// ģ��·��Ӧ����������ͨ�� setModelFns ����
-	unetConfig.model_file_name = nullptr;  // ��ʼ��Ϊ�գ��ȴ��ⲿ����
+	// 模型路径应由外部设置通过 setModelFns 函数
+	unetConfig.model_file_name = nullptr;  // 初始化为空，等待外部设置
 	
-	// ��ʼ��Ĭ��ֵ��������ҽ���setXXX���������
+	// 初始化默认值（后续可通过setXXX函数调整）
 	unetConfig.input_channels = 1;
 	unetConfig.num_classes = 3;
 	unetConfig.mandible_label = 1;
@@ -41,11 +41,11 @@ DentalUnet::DentalUnet()
 	unetConfig.mean = 0.0f;
 	unetConfig.std = 1.0f;
 	
-	// ������Ҫ����ⲿ�����Ĳ���
+	// 下面是需要从外部配置的参数
 	// voxel_spacing, patch_size, step_size_ratio, normalization_type, intensity properties
-	// ��Щ������ֻ�������� JSON ���ú����趨
+	// 这些参数需通过 JSON 配置后再设定
 	
-	// Initialize output paths
+	// 初始化输出路径
 	saveIntermediateResults = false;
 }
 
@@ -73,7 +73,7 @@ void  DentalUnet::setModelFns(const wchar_t* model_fn)
 		return;
 	}
 	
-	// Print model path for debugging
+	// 打印模型路径用于调试
 	std::wcout << L"[DEBUG] Model path: " << model_fn << endl;
 	
 	unetConfig.model_file_name = model_fn;
@@ -217,23 +217,23 @@ void DentalUnet::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* mo
 {
 	if (preprocessPath != nullptr) {
 		preprocessOutputPath = preprocessPath;
-		// Create directory if not exists
+		// 如果目录不存在则创建
 		std::filesystem::create_directories(preprocessPath);
 	}
 	
 	if (modelOutputPath != nullptr) {
 		this->modelOutputPath = modelOutputPath;
-		// Create directory if not exists
+		// 如果目录不存在则创建
 		std::filesystem::create_directories(modelOutputPath);
 	}
 	
 	if (postprocessPath != nullptr) {
 		postprocessOutputPath = postprocessPath;
-		// Create directory if not exists
+		// 如果目录不存在则创建
 		std::filesystem::create_directories(postprocessPath);
 	}
 	
-	// Enable saving if any path is set
+	// 如果设置了任何路径则启用保存
 	saveIntermediateResults = (preprocessPath != nullptr || modelOutputPath != nullptr || postprocessPath != nullptr);
 }
 
@@ -246,7 +246,7 @@ AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 		std::cout << "[DEBUG] GPU mode enabled, configuring CUDA provider..." << endl;
 		try {
 			//OrtCUDAProviderOptions cuda_options;
-			//cuda_options.device_id = 0;  // ??? GPU ?�� ID
+			//cuda_options.device_id = 0;  // 设置 GPU 设备 ID
 			//session_options.AppendExecutionProvider_CUDA(cuda_options);
 
 			Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
@@ -260,12 +260,12 @@ AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 		std::cout << "[DEBUG] Using CPU mode" << endl;
 	}
 	
-	// ?????????
+	// 设置线程数
 	session_options.SetIntraOpNumThreads(1);
 	session_options.SetInterOpNumThreads(1);
 	std::cout << "[DEBUG] Thread settings: IntraOp=1, InterOp=1" << endl;
 
-	// ??????
+	// 创建会话
 	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
@@ -276,7 +276,7 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 {
 	std::cout << "[DEBUG] DentalUnet::setInput() called" << endl;
 	
-	// Validate input
+	// 验证输入
 	if (srcData == nullptr) {
 		std::cerr << "[ERROR] srcData is NULL!" << endl;
 		return DentalCbctSegAI_STATUS_FAIED;
@@ -291,10 +291,10 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	Width0 = srcData->Width;
 	Height0 = srcData->Height;
 	Depth0 = srcData->Depth;
-	float voxelSpacing = srcData->VoxelSpacing; //??��: mm
-	float voxelSpacingX = srcData->VoxelSpacingX; //??��: mm
-	float voxelSpacingY = srcData->VoxelSpacingY; //??��: mm
-	float voxelSpacingZ = srcData->VoxelSpacingZ; //??��: mm
+	float voxelSpacing = srcData->VoxelSpacing; //单位: mm
+	float voxelSpacingX = srcData->VoxelSpacingX; //单位: mm
+	float voxelSpacingY = srcData->VoxelSpacingY; //单位: mm
+	float voxelSpacingZ = srcData->VoxelSpacingZ; //单位: mm
 	
 	std::cout << "[DEBUG] Input volume dimensions: " << Width0 << "x" << Height0 << "x" << Depth0 << endl;
 	std::cout << "[DEBUG] Voxel spacing: X=" << voxelSpacingX << ", Y=" << voxelSpacingY << ", Z=" << voxelSpacingZ << endl;
@@ -318,19 +318,19 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	float fovZ = float(Depth0) * voxelSpacingZ;
 
 	if (Height0 < 64 || Width0 < 64 || Depth0 < 64)
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //???????????��
+		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //输入体积太小�
 
 	if (Height0 > 4096 || Width0 > 4096 || Depth0 > 2048)
-		return DentalCbctSegAI_STATUS_VOLUME_LARGE; //?????????????
+		return DentalCbctSegAI_STATUS_VOLUME_LARGE; //输入体积太大
 
-	if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volume??��
+	if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volume太小�
 		return DentalCbctSegAI_STATUS_VOLUME_SMALL;
 
-	if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacing??��
+	if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacing太小�
 		return DentalCbctSegAI_STATUS_VOLUME_LARGE;
 
 	if (voxelSpacing > 1.1f || voxelSpacingX > 1.1f || voxelSpacingY > 1.1f || voxelSpacingZ > 1.1f)
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //voxelSpacing???
+		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //voxelSpacing太大
 
 	// 创建CImg对象并复制数据
 	//RAI: 右-前-上坐标系，与医学图像标准一致
@@ -502,7 +502,7 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	          << ", " << config.voxel_spacing[1] 
 	          << ", " << config.voxel_spacing[2] << "]" << endl;
 	
-	for (int i = 0; i < 3; ++i) {  // ???????????
+	for (int i = 0; i < 3; ++i) {  // 遍历三个维度
 		// 使用原始spacing计算缩放因子，与Python保持一致
 		scaled_factor = transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
 		int scaled_sz = std::round(input_size[i] * scaled_factor);
@@ -592,12 +592,12 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "final_preprocessed_volume mean: " << scaled_input_volume.mean() << endl;
 	std::cout << "final_preprocessed_volume variance: " << scaled_input_volume.variance() << endl;
 
-	// Save preprocessed data
+	// 保存预处理数据
 	if (saveIntermediateResults) {
 		savePreprocessedData(scaled_input_volume, L"preprocessed_normalized_volume");
 	}
 
-	//?????????????
+	//调用滑窗推理函数
 	std::cout << "[DEBUG] Calling slidingWindowInfer..." << endl;
 	try {
 		AI_INT is_ok = slidingWindowInfer(config, scaled_input_volume);
@@ -614,18 +614,18 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		return DentalCbctSegAI_STATUS_FAIED;
 	}
 
-	//???3D???????????
+	//如果进行了3D重采样，调整大小
 	if (is_volume_scaled)
 		predicted_output_prob.resize(input_size[0], input_size[1], input_size[2], config.num_classes, 3);
 
-	// Save model output (probability volume)
+	// 保存模型输出（概率体）
 	if (saveIntermediateResults) {
 		saveModelOutput(predicted_output_prob, L"model_output_probability");
 	}
 
 	output_seg_mask = argmax_spectrum(predicted_output_prob);
 
-	// Save postprocessed data
+	// 保存后处理数据
 	if (saveIntermediateResults) {
 		savePostprocessedData(output_seg_mask, L"postprocessed_segmentation_mask");
 	}
@@ -640,7 +640,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		std::cout << "[DEBUG] Configuring CUDA provider..." << endl;
 		try {
 			OrtCUDAProviderOptions cuda_options;
-			//cuda_options.gpu_mem_limit = 6 * 1024 * 1024 * 1024;  // ?????6GB???[6,12](@ref)
+			//cuda_options.gpu_mem_limit = 6 * 1024 * 1024 * 1024;  // 设置显存6GB限制[6,12](@ref)
 			cuda_options.device_id = 0;
 			session_options.AppendExecutionProvider_CUDA(cuda_options);
 			std::cout << "[DEBUG] CUDA provider configured successfully" << endl;
@@ -652,16 +652,16 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 	std::cout << "env setting is done" << endl;
 
-	// ??????
+	// 创建会话
 	Ort::AllocatorWithDefaultOptions allocator;
 	
-	// ???????????
+	// 检查模型文件名
 	if (config.model_file_name == nullptr) {
 		std::cerr << "ERROR: Model file name is NULL!" << endl;
 		return DentalCbctSegAI_LOADING_FAIED;
 	}
 	
-	//try-catch?ONNX Runtime?
+	//try-catch处理ONNX Runtime异常
 	try {
 		std::cout << "Creating ONNX session..." << endl;
 		
@@ -689,28 +689,28 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
 	}
 
-	// ??��
+	// 验证
 	if (config.patch_size.size() != 3) {
 		throw std::runtime_error("Patch size should be 3D (depth, height, width)");
 	}
 
-	// ONNX tensor shape: (batch, channel, depth, height, width)
+	// ONNX张量形状: (batch, channel, depth, height, width)
 	std::vector<int64_t> input_tensor_shape = { 1, 1, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
 
 	int depth = normalized_volume.depth();
 	int width = normalized_volume.width();
 	int height = normalized_volume.height();
 
-	// x Image width, y Image height, z Image depth
+	// x图像宽度, y图像高度, z图像深度
 	float step_size_ratio = config.step_size_ratio;
 	float actualStepSize[3];
 	
 	// 使用与Python nnUNet相同的tile计算逻辑
 	// 直接计算步长：step = patch_size * step_size_ratio
-	// actualStepSize[0] = X轴 (width), actualStepSize[1] = Y轴 (height), actualStepSize[2] = Z轴 (depth)
-	actualStepSize[0] = config.patch_size[2] * step_size_ratio;  // width
-	actualStepSize[1] = config.patch_size[1] * step_size_ratio;  // height
-	actualStepSize[2] = config.patch_size[0] * step_size_ratio;  // depth
+	// actualStepSize[0] = X轴 (宽度), actualStepSize[1] = Y轴 (高度), actualStepSize[2] = Z轴 (深度)
+	actualStepSize[0] = config.patch_size[2] * step_size_ratio;  // 宽度
+	actualStepSize[1] = config.patch_size[1] * step_size_ratio;  // 高度
+	actualStepSize[2] = config.patch_size[0] * step_size_ratio;  // 深度
 	
 	// 计算步数：确保至少有1步，即使维度小于patch size
 	int X_num_steps = std::max(1, (int)ceil(float(width - config.patch_size[2]) / actualStepSize[0]) + 1);
@@ -732,7 +732,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		std::cout << "  Total number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
 	}
 
-	//?
+	//初始化输出概率体
 	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
 	CImg<float> count_vol = CImg<float>(width, height, depth, 1, 0.f);
 	//std::cout << "predSegProbVolume shape: " << depth << width << height << endl;
@@ -817,13 +817,13 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				// 
 				std::cout << "[DEBUG] Running ONNX inference for patch #" << patch_count << endl;
 				
-				// Validate input tensor
+				// 验证输入 tensor
 				if (input_data_ptr == nullptr) {
 					std::cerr << "[ERROR] Input data pointer is null!" << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
-				// Declare output_tensors outside try block
+				// 在try块外声明输出张量
 				std::vector<Ort::Value> output_tensors;
 				
 				try {
@@ -859,7 +859,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
-				// ?
+				// 处理输出张量
 				std::cout << "[DEBUG] Processing output tensor..." << endl;
 				
 				if (output_tensors.empty()) {
@@ -874,7 +874,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
-				// ??CImg
+				// 复制到CImg
 				std::cout << "[DEBUG] Copying output data to win_pob..." << endl;
 				std::memcpy(win_pob.data(), output_data, output_patch_vol_sz);
 				output_tensors.clear();
@@ -886,7 +886,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				std::cout << "  - Mean: " << win_pob.mean() << endl;
 				std::cout << "  - Dimensions: " << win_pob.width() << "x" << win_pob.height() << "x" << win_pob.depth() << "x" << win_pob.spectrum() << endl;
 
-				// Save individual tile
+				// 保存单个tile
 				if (saveIntermediateResults) {
 					saveTile(win_pob, patch_count, lb_x, lb_y, lb_z);
 				}
@@ -898,7 +898,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						int gy = lb_y + y;
 						int gz = lb_z + z;
 						
-						// Validate bounds before writing
+						// 写入前验证边界
 						if (gx < 0 || gx >= width || gy < 0 || gy >= height || gz < 0 || gz >= depth) {
 							std::cerr << "[ERROR] Out of bounds write attempt: (" << gx << ", " << gy << ", " << gz << ")" << endl;
 							return DentalCbctSegAI_STATUS_FAIED;
@@ -917,7 +917,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		}
 	}
 
-	//?
+	//归一化
 	cimg_forXYZC(predicted_output_prob, x, y, z, c) {
 		predicted_output_prob(x, y, z, c) /= count_vol(x, y, z);
 	}
@@ -936,12 +936,12 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 void DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 {
-	//HU????
+	//HU值裁剪
 	float min_hu4dentalCTNormalization = config.min_max_HU[0];
 	float max_hu4dentalCTNormalization = config.min_max_HU[1];
 	input_volume.cut(min_hu4dentalCTNormalization, max_hu4dentalCTNormalization);
 
-	//????z-score
+	//应用z-score标准化
 	float mean_hu4dentalCTNormalization = config.mean_std_HU[0];
 	float std_hu4dentalCTNormalization = config.mean_std_HU[1];
 	input_volume -= mean_hu4dentalCTNormalization;
@@ -953,18 +953,18 @@ void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const 
 {
 	std::vector<float> sigmas(3);
 	for (int i = 0; i < 3; ++i)
-		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // ??W=5??+1???
+		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // 使用W=5的高斯核
 
 	int64_t depth  = patch_sizes[0];
 	int64_t height = patch_sizes[1]; 
 	int64_t width  = patch_sizes[2];
 
-	// ???????????????
+	// 计算中心点坐标
 	float z_center = (depth - 1)  / 2.0f;
 	float y_center = (height - 1) / 2.0f;
 	float x_center = (width - 1)  / 2.0f;
 
-	// ??????????????????????
+	// 计算标准差参数
 	float z_sigma = depth  / 4.0f;
 	float y_sigma = height / 4.0f;
 	float x_sigma = width  / 4.0f;
@@ -988,15 +988,15 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 		throw std::invalid_argument("Input must be a non-empty 4D CImg with spectrum dimension.");
 	}
 
-	// ???????????????????spectrum???
+	// 创建结果图像，大小与输入相同，但spectrum维度为1
 	CImg<short> result(input.width(), input.height(), input.depth(), 1, 0);
 
-	// ??????????��?? (x,y,z)
+	// 遍历每个体素 (x,y,z)
 	cimg_forXYZ(input, x, y, z) {
 		short max_idx = 0;
 		float max_val = input(x, y, z, 0);
 
-		// ????spectrum???
+		// 遍历spectrum维度
 		for (short s = 1; s < input.spectrum(); ++s) {
 			const float current_val = input(x, y, z, s);
 			if (current_val > max_val) {
@@ -1004,7 +1004,7 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 				max_idx = s;
 			}
 		}
-		result(x, y, z) = max_idx; // ?��???????
+		result(x, y, z) = max_idx; // 存储最大值的索引
 	}
 	return result;
 }
@@ -1117,18 +1117,18 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 {
 	if (!saveIntermediateResults || preprocessOutputPath.empty()) return;
 	
-	// Save as NIfTI format with ITK to preserve origin
+	// 使用ITK保存为NIfTI格式以保留origin信息
 	std::wstring niftiPath = preprocessOutputPath + L"\\" + filename + L".nii.gz";
 	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	
-	// Define ITK types
+	// 定义ITK类型
 	using FloatImageType = itk::Image<float, 3>;
 	using WriterType = itk::ImageFileWriter<FloatImageType>;
 	
-	// Create ITK image
+	// 创建ITK图像
 	FloatImageType::Pointer image = FloatImageType::New();
 	
-	// Set image size
+	// 设置图像大小
 	FloatImageType::SizeType size;
 	size[0] = data.width();
 	size[1] = data.height();
@@ -1144,7 +1144,7 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 	image->SetRegions(region);
 	image->Allocate();
 	
-	// Set metadata
+	// 设置元数据
 	FloatImageType::PointType origin;
 	origin[0] = imageMetadata.origin[0];
 	origin[1] = imageMetadata.origin[1];
@@ -1157,14 +1157,14 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 	spacing[2] = imageMetadata.spacing[2];
 	image->SetSpacing(spacing);
 	
-	// Copy data
+	// 复制数据
 	itk::ImageRegionIterator<FloatImageType> it(image, region);
 	const float* cimg_data = data.data();
 	for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
 		it.Set(*cimg_data++);
 	}
 	
-	// Write image
+	// 写入图像
 	WriterType::Pointer writer = WriterType::New();
 	writer->SetFileName(narrowNiftiPath);
 	writer->SetInput(image);
@@ -1175,19 +1175,19 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 		std::cerr << "Error saving preprocessed data: " << e << std::endl;
 	}
 	
-	// Save as raw binary for numpy
+	// 保存为二进制格式供numpy使用
 	std::wstring rawPath = preprocessOutputPath + L"\\" + filename + L".raw";
 	std::wstring metaPath = preprocessOutputPath + L"\\" + filename + L"_meta.txt";
 	
 	std::string narrowRawPath(rawPath.begin(), rawPath.end());
 	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
 	
-	// Save raw data
+	// 保存原始数据
 	std::ofstream rawFile(narrowRawPath, std::ios::binary);
 	rawFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(float));
 	rawFile.close();
 	
-	// Save metadata for Python
+	// 保存Python使用的元数据
 	std::ofstream metaFile(narrowMetaPath);
 	metaFile << "dtype: float32" << std::endl;
 	metaFile << "shape: (" << data.depth() << ", " << data.height() << ", " << data.width() << ")" << std::endl;
@@ -1205,16 +1205,16 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 {
 	if (!saveIntermediateResults || modelOutputPath.empty()) return;
 	
-	// Save as NIfTI format with ITK to preserve origin
+	// 使用ITK保存为NIfTI格式以保留origin信息
 	std::wstring niftiPath = modelOutputPath + L"\\" + filename + L".nii.gz";
 	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	
-	// Define ITK types
+	// 定义ITK类型
 	using FloatImageType = itk::Image<float, 3>;
 	using WriterType = itk::ImageFileWriter<FloatImageType>;
 	
-	// Note: For multi-channel data, we might need to save each channel separately
-	// For now, save the first channel if it's a probability map
+	// 注意：对于多通道数据，我们可能需要分别保存每个通道
+	// 目前，如果是概率图则保存第一个通道
 	CImg<float> dataToSave;
 	if (data.spectrum() > 1) {
 		dataToSave = data.get_channel(0);
@@ -1222,10 +1222,10 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 		dataToSave = data;
 	}
 	
-	// Create ITK image
+	// 创建ITK图像
 	FloatImageType::Pointer image = FloatImageType::New();
 	
-	// Set image size
+	// 设置图像大小
 	FloatImageType::SizeType size;
 	size[0] = dataToSave.width();
 	size[1] = dataToSave.height();
@@ -1241,7 +1241,7 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	image->SetRegions(region);
 	image->Allocate();
 	
-	// Set metadata
+	// 设置元数据
 	FloatImageType::PointType origin;
 	origin[0] = imageMetadata.origin[0];
 	origin[1] = imageMetadata.origin[1];
@@ -1254,14 +1254,14 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	spacing[2] = imageMetadata.spacing[2];
 	image->SetSpacing(spacing);
 	
-	// Copy data
+	// 复制数据
 	itk::ImageRegionIterator<FloatImageType> it(image, region);
 	const float* cimg_data = dataToSave.data();
 	for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
 		it.Set(*cimg_data++);
 	}
 	
-	// Write image
+	// 写入图像
 	WriterType::Pointer writer = WriterType::New();
 	writer->SetFileName(narrowNiftiPath);
 	writer->SetInput(image);
@@ -1272,19 +1272,19 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 		std::cerr << "Error saving model output: " << e << std::endl;
 	}
 	
-	// Save as raw binary for numpy
+	// 保存为二进制格式供numpy使用
 	std::wstring rawPath = modelOutputPath + L"\\" + filename + L".raw";
 	std::wstring metaPath = modelOutputPath + L"\\" + filename + L"_meta.txt";
 	
 	std::string narrowRawPath(rawPath.begin(), rawPath.end());
 	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
 	
-	// Save raw data
+	// 保存原始数据
 	std::ofstream rawFile(narrowRawPath, std::ios::binary);
 	rawFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(float));
 	rawFile.close();
 	
-	// Save metadata for Python
+	// 保存Python使用的元数据
 	std::ofstream metaFile(narrowMetaPath);
 	metaFile << "dtype: float32" << std::endl;
 	metaFile << "shape: (" << data.spectrum() << ", " << data.depth() << ", " << data.height() << ", " << data.width() << ")" << std::endl;
@@ -1302,18 +1302,18 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 {
 	if (!saveIntermediateResults || postprocessOutputPath.empty()) return;
 	
-	// Save as NIfTI format with ITK to preserve origin
+	// 使用ITK保存为NIfTI格式以保留origin信息
 	std::wstring niftiPath = postprocessOutputPath + L"\\" + filename + L".nii.gz";
 	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	
-	// Define ITK types
+	// 定义ITK类型
 	using ShortImageType = itk::Image<short, 3>;
 	using WriterType = itk::ImageFileWriter<ShortImageType>;
 	
-	// Create ITK image
+	// 创建ITK图像
 	ShortImageType::Pointer image = ShortImageType::New();
 	
-	// Set image size
+	// 设置图像大小
 	ShortImageType::SizeType size;
 	size[0] = data.width();
 	size[1] = data.height();
@@ -1329,7 +1329,7 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 	image->SetRegions(region);
 	image->Allocate();
 	
-	// Set metadata
+	// 设置元数据
 	ShortImageType::PointType origin;
 	origin[0] = imageMetadata.origin[0];
 	origin[1] = imageMetadata.origin[1];
@@ -1342,14 +1342,14 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 	spacing[2] = imageMetadata.spacing[2];
 	image->SetSpacing(spacing);
 	
-	// Copy data
+	// 复制数据
 	itk::ImageRegionIterator<ShortImageType> it(image, region);
 	const short* cimg_data = data.data();
 	for (it.GoToBegin(); !it.IsAtEnd(); ++it) {
 		it.Set(*cimg_data++);
 	}
 	
-	// Write image
+	// 写入图像
 	WriterType::Pointer writer = WriterType::New();
 	writer->SetFileName(narrowNiftiPath);
 	writer->SetInput(image);
@@ -1360,19 +1360,19 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 		std::cerr << "Error saving postprocessed data: " << e << std::endl;
 	}
 	
-	// Save as raw binary for numpy
+	// 保存为二进制格式供numpy使用
 	std::wstring rawPath = postprocessOutputPath + L"\\" + filename + L".raw";
 	std::wstring metaPath = postprocessOutputPath + L"\\" + filename + L"_meta.txt";
 	
 	std::string narrowRawPath(rawPath.begin(), rawPath.end());
 	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
 	
-	// Save raw data
+	// 保存原始数据
 	std::ofstream rawFile(narrowRawPath, std::ios::binary);
 	rawFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(short));
 	rawFile.close();
 	
-	// Save metadata for Python
+	// 保存Python使用的元数据
 	std::ofstream metaFile(narrowMetaPath);
 	metaFile << "dtype: int16" << std::endl;
 	metaFile << "shape: (" << data.depth() << ", " << data.height() << ", " << data.width() << ")" << std::endl;
@@ -1390,31 +1390,31 @@ void DentalUnet::saveTile(const CImg<float>& tile, int tileIndex, int x, int y, 
 {
 	if (!saveIntermediateResults || modelOutputPath.empty()) return;
 	
-	// Create tiles subdirectory if not exists
+	// 如果不存在则创建tiles子目录
 	std::filesystem::create_directories(modelOutputPath + L"\\tiles");
 	
 	std::wstringstream ss;
 	ss << L"tile_" << std::setfill(L'0') << std::setw(4) << tileIndex 
 	   << L"_x" << x << L"_y" << y << L"_z" << z;
 	
-	// Save as NIfTI format
-	std::wstring niftiPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".nii.gz";
+	// 保存为NIfTI格式（未压缩）
+	std::wstring niftiPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".nii";
 	std::string narrowNiftiPath(niftiPath.begin(), niftiPath.end());
 	tile.save(narrowNiftiPath.c_str());
 	
-	// Save as raw binary
+	// 保存为二进制格式
 	std::wstring rawPath = modelOutputPath + L"\\tiles\\" + ss.str() + L".raw";
 	std::wstring metaPath = modelOutputPath + L"\\tiles\\" + ss.str() + L"_meta.txt";
 	
 	std::string narrowRawPath(rawPath.begin(), rawPath.end());
 	std::string narrowMetaPath(metaPath.begin(), metaPath.end());
 	
-	// Save raw data
+	// 保存原始数据
 	std::ofstream rawFile(narrowRawPath, std::ios::binary);
 	rawFile.write(reinterpret_cast<const char*>(tile.data()), tile.size() * sizeof(float));
 	rawFile.close();
 	
-	// Save metadata
+	// 保存元数据
 	std::ofstream metaFile(narrowMetaPath);
 	metaFile << "dtype: float32" << std::endl;
 	metaFile << "shape: (" << tile.spectrum() << ", " << tile.depth() << ", " << tile.height() << ", " << tile.width() << ")" << std::endl;

@@ -246,6 +246,16 @@ int main()
         // 设置TileStepRatio
         DentalCbctSegAI_SetTileStepRatio(AI_Hdl, 0.5f);
         
+        // 设置中间结果输出路径
+        wstring preprocessPath = L"..\\..\\..\\result\\preprocess";
+        wstring modelOutputPath = L"..\\..\\..\\result\\model_output";
+        wstring postprocessPath = L"..\\..\\..\\result\\postprocess";
+        
+        DentalCbctSegAI_SetOutputPaths(AI_Hdl, 
+            const_cast<wchar_t*>(preprocessPath.c_str()),
+            const_cast<wchar_t*>(modelOutputPath.c_str()),
+            const_cast<wchar_t*>(postprocessPath.c_str()));
+        
         //===== 执行分割推理 =====
         cout << "\\n======= Running Inference =======" << endl;
         auto start = chrono::steady_clock::now();

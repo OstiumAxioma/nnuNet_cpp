@@ -77,7 +77,7 @@ public:
 
 	void    setStepSizeRatio(float ratio);
 	
-	// 新增：参数设置接�?
+	// 参数设置接口
 	void    setPatchSize(int64_t x, int64_t y, int64_t z);
 	void    setNumClasses(int classes);
 	void    setInputChannels(int channels);
@@ -92,14 +92,14 @@ public:
 	// 新增：JSON配置接口
 	bool    setConfigFromJsonString(const char* jsonContent);
 
-	AI_INT  performInference(AI_DataInfo *srcData); //ִ�зָ�����
+	AI_INT  performInference(AI_DataInfo *srcData); //执行分割推理
 
-	AI_INT  getSegMask(AI_DataInfo *dstData); //��ȡ�ָ���
+	AI_INT  getSegMask(AI_DataInfo *dstData); //获取分割掩码
 
-	void    setDnnOptions(); //�������ã��Ƿ�cuda��opengl����չ��
+	void    setDnnOptions(); //设置选项，是否使用cuda或opengl等扩展
 	void    setAlgParameter();
 	
-	// �����������·��?
+	// 设置输出路径
 	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
 
 private:
@@ -107,7 +107,7 @@ private:
 	bool   use_gpu;
 	Ort::Env env;
 
-	//���룺����CBCT������
+	//输入：原始CBCT体数据
 	CImg<short> input_cbct_volume;
 
 	float intensity_mean;
@@ -122,28 +122,28 @@ private:
 
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
-	// 新增：保存原始spacing（从文件读取的真实物理spacing�?
+	// 保存原始spacing（从文件读取的真实物理spacing）
 	std::vector<float> original_voxel_spacing;
 	std::vector<float> transposed_original_voxel_spacing;
 	
-	// 新增：保存图像元数据（origin, spacing, direction�?
+	// 保存图像元数据（origin, spacing, direction）
 	struct ImageMetadata {
 		double origin[3];
 		double spacing[3];
 		double direction[9];  // 3x3 direction matrix stored as 1D array
 		
 		ImageMetadata() {
-			// 默认�?
+			// 默认值
 			origin[0] = origin[1] = origin[2] = 0.0;
 			spacing[0] = spacing[1] = spacing[2] = 1.0;
-			// 默认方向为单位矩�?
+			// 默认方向为单位矩阵
 			direction[0] = direction[4] = direction[8] = 1.0;
 			direction[1] = direction[2] = direction[3] = 0.0;
 			direction[5] = direction[6] = direction[7] = 0.0;
 		}
 	} imageMetadata;
 
-	//������ָ�������άMask
+	//输出：分割结果三维Mask
 	CImg<float> predicted_output_prob;
 	CImg<short> output_seg_mask;
 
@@ -153,28 +153,28 @@ private:
 	//std::unique_ptr<Ort::Session> semantic_seg_session_ptr;
 	//std::unique_ptr<Ort::Session> ian_seg_session_ptr;
 
-	//ģ�����ò���
+	//模型配置参数
 	nnUNetConfig unetConfig;
 	
-	// JSON����������
+	// JSON配置解析器
 	ConfigParser configParser;
 	
-	// �������·��?
+	// 输出路径设置
 	std::wstring preprocessOutputPath;
 	std::wstring modelOutputPath;
 	std::wstring postprocessOutputPath;
 	bool saveIntermediateResults;
 
-	//����CBCT������
+	//设置CBCT输入数据
 	AI_INT  setInput(AI_DataInfo *srcData); 
 
 	AI_INT  initializeOnnxruntimeInstances();
 
-	//uunet�ָ�ģ�ͻ����������ָ�
+	//uunet分割模型基础卷积神经分割
 	AI_INT  segModelInfer(nnUNetConfig config, CImg<short> input_volume);
 	AI_INT  slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume);
 
-	AI_INT   postProcessing();// �Էָ������к���
+	AI_INT   postProcessing();// 对分割结果进行后处理
 
 	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
 	void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);
@@ -183,7 +183,7 @@ private:
 	// 预处理步骤函数
 	CImg<short> crop_to_nonzero(const CImg<short>& input, CropBBox& bbox);
 	
-	// �����������ļ��ķ���
+	// 保存中间结果文件的方法
 	void    savePreprocessedData(const CImg<float>& data, const std::wstring& filename);
 	void    saveModelOutput(const CImg<float>& data, const std::wstring& filename);
 	void    savePostprocessedData(const CImg<short>& data, const std::wstring& filename);

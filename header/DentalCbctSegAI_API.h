@@ -3,20 +3,20 @@
 
 
 // ////////////////////////////////////////////////////////////////////////////
-// 文件名：DentalCbctSegAI_API.h
-// 作者：卢维
-// 说明：牙齿智慧CBCT结构分割 接口
+// �ļ���DentalCbctSegAI_API.h
+// ���ߣ���ά
+// ˵�������� ��ǻCBCT�ṹ�ָ� �ӿ�
 //
-// 创建日期：2025-4-30
+// �������ڣ�2025-4-30
 
 // ////////////////////////////////////////////////////////////////////////////
 
 #define DentalCbctSegAI_API  extern "C" __declspec(dllexport)
 
 
-#define DentalCbctSegAI_STATUS_SUCCESS          0   // 成功
-#define DentalCbctSegAI_STATUS_HANDLE_NULL      1   // 空句柄，请先调用 DentalCbctSegAI_CreateObj() 函数创建句柄
-#define DentalCbctSegAI_STATUS_VOLUME_SMALL     2   // 输入体数据过小
+#define DentalCbctSegAI_STATUS_SUCCESS          0   // �ɹ�
+#define DentalCbctSegAI_STATUS_HANDLE_NULL      1   // �վ���������ȵ��� DentalCbctSegAI_CreateObj() �����������
+#define DentalCbctSegAI_STATUS_VOLUME_SMALL     2   // ���������ݹ�С
 #define DentalCbctSegAI_STATUS_VOLUME_LARGE     3   // ���������ݹ���
 #define DentalCbctSegAI_STATUS_CROP_FAIED       4   // ��λ��������ʧ��
 #define DentalCbctSegAI_STATUS_FAIED            5   // �ָ�����ʧ��

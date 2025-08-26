@@ -40,6 +40,7 @@ DentalUnet::DentalUnet()
 	// 初始化intensity properties的默认值
 	unetConfig.mean = 0.0f;
 	unetConfig.std = 1.0f;
+	unetConfig.use_mask_for_norm = false;  // 默认不使用mask
 	
 	// 下面是需要从外部配置的参数
 	// voxel_spacing, patch_size, step_size_ratio, normalization_type, intensity properties
@@ -193,6 +194,9 @@ bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
 		// 添加直接访问的intensity properties到config
 		unetConfig.mean = config.mean;
 		unetConfig.std = config.std;
+		
+		// 添加归一化相关参数
+		unetConfig.use_mask_for_norm = config.use_mask_for_norm;
 		
 		return true;
 	}
@@ -446,21 +450,31 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 	CImg<short> cropped_volume = crop_to_nonzero(input_cbct_volume, crop_bbox);
 	
 	// 3. 在裁剪后的数据上计算或使用配置的归一化参数
-	std::cout << "[DEBUG] Step 3: Calculate intensity statistics on cropped data" << endl;
-	if (unetConfig.mean != 0.0f || unetConfig.std != 1.0f) {
-		// 使用JSON配置中的参数
-		intensity_mean = unetConfig.mean;
-		intensity_std = unetConfig.std;
-		std::cout << "[DEBUG] Using configured intensity properties: mean=" 
-		          << intensity_mean << ", std=" << intensity_std << endl;
+	std::cout << "[DEBUG] Step 3: Determine intensity statistics strategy" << endl;
+	
+	if (unetConfig.use_mask_for_norm) {
+		// 当use_mask_for_norm=true时，总是动态计算（匹配Python行为）
+		std::cout << "[DEBUG] use_mask_for_norm=true, will calculate dynamically in normalization step" << endl;
+		// 不在这里计算，将在segModelInfer的归一化步骤中动态计算
+		intensity_mean = 0.0f;  // 占位值，实际不会使用
+		intensity_std = 1.0f;   // 占位值，实际不会使用
 	} else {
-		// 在裁剪后的数据上计算统计参数
-		intensity_mean = (float)cropped_volume.mean();
-		intensity_std = (float)cropped_volume.variance();
-		intensity_std = std::sqrt(intensity_std);
-		if (intensity_std < 0.0001f) intensity_std = 0.0001f;
-		std::cout << "[DEBUG] Computed intensity statistics on cropped data: mean=" 
-		          << intensity_mean << ", std=" << intensity_std << endl;
+		// 当use_mask_for_norm=false时，使用JSON配置或计算全局统计
+		if (std::abs(unetConfig.mean) > 0.001f || std::abs(unetConfig.std - 1.0f) > 0.001f) {
+			// 使用JSON配置中的参数
+			intensity_mean = unetConfig.mean;
+			intensity_std = unetConfig.std;
+			std::cout << "[DEBUG] Using configured intensity properties from JSON: mean=" 
+			          << intensity_mean << ", std=" << intensity_std << endl;
+		} else {
+			// 计算全局统计
+			intensity_mean = (float)cropped_volume.mean();
+			intensity_std = (float)cropped_volume.variance();
+			intensity_std = std::sqrt(intensity_std);
+			if (intensity_std < 0.0001f) intensity_std = 0.0001f;
+			std::cout << "[DEBUG] Computed global intensity statistics: mean=" 
+			          << intensity_mean << ", std=" << intensity_std << endl;
+		}
 	}
 
 	// 4. 调用推理（包含归一化和重采样）
@@ -562,9 +576,63 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		break;
 	case 20:
 		std::cout << "[DEBUG] Using Z-Score Normalization" << endl;
-		std::cout << "[DEBUG] intensity_mean: " << intensity_mean << ", intensity_std: " << intensity_std << endl;
-		normalized_volume -= intensity_mean;
-		normalized_volume /= intensity_std;
+		if (config.use_mask_for_norm) {
+			std::cout << "[DEBUG] Using mask-based normalization (dynamic calculation)" << endl;
+			// 创建mask（非零区域）
+			CImg<bool> mask(normalized_volume.width(), normalized_volume.height(), normalized_volume.depth());
+			cimg_forXYZ(normalized_volume, x, y, z) {
+				mask(x, y, z) = (normalized_volume(x, y, z) > 0);
+			}
+			
+			// 在mask区域动态计算mean和std（匹配Python行为）
+			float mask_mean = 0.0f;
+			float mask_std = 0.0f;
+			int mask_count = 0;
+			
+			// 计算mask区域的mean
+			cimg_forXYZ(normalized_volume, x, y, z) {
+				if (mask(x, y, z)) {
+					mask_mean += normalized_volume(x, y, z);
+					mask_count++;
+				}
+			}
+			
+			if (mask_count > 0) {
+				mask_mean /= mask_count;
+				
+				// 计算mask区域的std
+				cimg_forXYZ(normalized_volume, x, y, z) {
+					if (mask(x, y, z)) {
+						float diff = normalized_volume(x, y, z) - mask_mean;
+						mask_std += diff * diff;
+					}
+				}
+				mask_std = std::sqrt(mask_std / mask_count);
+				if (mask_std < 1e-8f) mask_std = 1e-8f;  // 匹配Python的max(std, 1e-8)
+				
+				std::cout << "[DEBUG] Dynamically calculated mask-based stats: mean=" << mask_mean 
+				          << ", std=" << mask_std << ", mask_pixels=" << mask_count << endl;
+				
+				// 只对mask区域进行归一化，背景设为0
+				cimg_forXYZ(normalized_volume, x, y, z) {
+					if (mask(x, y, z)) {
+						normalized_volume(x, y, z) = (normalized_volume(x, y, z) - mask_mean) / mask_std;
+					} else {
+						normalized_volume(x, y, z) = 0.0f;
+					}
+				}
+				std::cout << "[DEBUG] Normalized " << mask_count << " non-zero pixels, set " 
+				          << (normalized_volume.size() - mask_count) << " background pixels to 0" << endl;
+			} else {
+				std::cout << "[WARNING] No non-zero pixels found for mask normalization" << endl;
+			}
+		} else {
+			// 传统的全局归一化
+			std::cout << "[DEBUG] Using global normalization" << endl;
+			std::cout << "[DEBUG] intensity_mean: " << intensity_mean << ", intensity_std: " << intensity_std << endl;
+			normalized_volume -= intensity_mean;
+			normalized_volume /= intensity_std;
+		}
 		break;
 	default:
 		std::cout << "[DEBUG] Using default Z-Score Normalization" << endl;
@@ -579,9 +647,12 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "[DEBUG] Step 2: Resampling (after normalization)" << endl;
 	CImg<float> scaled_input_volume;
 	if (is_volume_scaled) {
-		scaled_input_volume = normalized_volume.get_resize(output_size[0], output_size[1], output_size[2], -100, 3);
+		// 使用三次插值（5）而不是线性插值（3）以匹配Python的order=3
+		// CImg插值模式: 0=最近邻, 1=线性, 2=移动平均, 3=线性, 5=三次(cubic)
+		scaled_input_volume = normalized_volume.get_resize(output_size[0], output_size[1], output_size[2], -100, 5);
 		std::cout << "Resampled from " << normalized_volume.width() << "x" << normalized_volume.height() << "x" << normalized_volume.depth()
 		          << " to " << scaled_input_volume.width() << "x" << scaled_input_volume.height() << "x" << scaled_input_volume.depth() << endl;
+		std::cout << "[DEBUG] Using cubic interpolation (mode=5) to match Python's order=3" << endl;
 	} else {
 		scaled_input_volume.assign(normalized_volume);
 	}
@@ -589,6 +660,39 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "final_preprocessed_volume depth: " << scaled_input_volume.depth() << endl;
 	std::cout << "final_preprocessed_volume mean: " << scaled_input_volume.mean() << endl;
 	std::cout << "final_preprocessed_volume variance: " << scaled_input_volume.variance() << endl;
+	
+	// 添加详细的调试输出以便与Python版本对比
+	std::cout << "[DEBUG] === Preprocessing Summary ===" << endl;
+	std::cout << "[DEBUG] Normalization type: " << config.normalization_type << endl;
+	std::cout << "[DEBUG] Use mask for norm: " << (config.use_mask_for_norm ? "true" : "false") << endl;
+	if (!config.use_mask_for_norm) {
+		std::cout << "[DEBUG] Intensity mean used: " << intensity_mean << endl;
+		std::cout << "[DEBUG] Intensity std used: " << intensity_std << endl;
+	} else {
+		std::cout << "[DEBUG] Intensity stats: dynamically calculated on mask region" << endl;
+	}
+	std::cout << "[DEBUG] Final volume shape: " << scaled_input_volume.width() << "x" 
+	          << scaled_input_volume.height() << "x" << scaled_input_volume.depth() << endl;
+	std::cout << "[DEBUG] Final volume min: " << scaled_input_volume.min() << endl;
+	std::cout << "[DEBUG] Final volume max: " << scaled_input_volume.max() << endl;
+	std::cout << "[DEBUG] Final volume mean: " << scaled_input_volume.mean() << endl;
+	std::cout << "[DEBUG] Final volume std: " << std::sqrt(scaled_input_volume.variance()) << endl;
+	
+	// 输出一些采样点的值以便详细对比
+	if (scaled_input_volume.size() > 0) {
+		int sample_z = scaled_input_volume.depth() / 2;
+		int sample_y = scaled_input_volume.height() / 2;
+		int sample_x = scaled_input_volume.width() / 2;
+		std::cout << "[DEBUG] Sample value at center (" << sample_x << "," << sample_y << "," << sample_z << "): " 
+		          << scaled_input_volume(sample_x, sample_y, sample_z) << endl;
+		
+		// 输出索引(2,162,44)处的值以对比最大差异位置
+		if (scaled_input_volume.depth() > 2 && scaled_input_volume.height() > 162 && scaled_input_volume.width() > 44) {
+			std::cout << "[DEBUG] Value at index (44,162,2) [x,y,z]: " 
+			          << scaled_input_volume(44, 162, 2) << endl;
+		}
+	}
+	std::cout << "[DEBUG] =========================" << endl;
 
 	// 保存预处理数据
 	if (saveIntermediateResults) {

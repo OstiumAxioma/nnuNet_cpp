@@ -56,6 +56,9 @@ struct nnUNetConfig {
 	// 直接访问的intensity properties
 	float mean;
 	float std;
+	
+	// 归一化相关参数
+	bool use_mask_for_norm;
 
 	bool use_mirroring;
 };

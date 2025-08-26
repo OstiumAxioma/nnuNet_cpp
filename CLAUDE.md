@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a dental/medical image segmentation application using ONNX Runtime for inference with CImg for image processing. The project implements tooth segmentation on CBCT (Cone Beam Computed Tomography) 3D medical images.
+This is a medical image segmentation application using ONNX Runtime for inference with CImg for image processing. The project implements segmentation on 3D medical images.
 
 ## Build Commands
 
@@ -58,10 +58,7 @@ Status codes:
 ## Input/Output Format
 
 - Input: Analyze format medical images (.hdr/.img pair)
-- Output: Analyze format label mask where tooth structures are labeled:
-  - For tooth k: pulp (3k), dentin (3k+1), crown/metal (3k+2)
-  - Upper teeth: k = 1,2,3...
-  - Lower teeth: k = -1,-2,-3...
+- Output: Analyze format label mask with segmentation results
 
 ## Known Issues
 

@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 
 DentalUnet::DentalUnet()
 {
@@ -837,6 +838,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		std::cout << "  Actual step sizes: X=" << actualStepSize[0] << ", Y=" << actualStepSize[1] << ", Z=" << actualStepSize[2] << endl;
 		std::cout << "  Number of steps: X=" << X_num_steps << ", Y=" << Y_num_steps << ", Z=" << Z_num_steps << endl;
 		std::cout << "  Total number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
+		std::cout << "  TTA (use_mirroring): " << (config.use_mirroring ? "enabled (NOT IMPLEMENTED)" : "disabled") << endl;
 	}
 
 	//初始化输出概率体
@@ -948,10 +950,14 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					);
 					std::cout << "[DEBUG] session.Run() completed successfully" << endl;
 
+					// 暂时禁用TTA以简化调试
+					// TODO: 实现完整的TTA（7种镜像组合）
+					/*
 					if (config.use_mirroring && use_gpu)
 					{
 						input_patch = input_patch.mirror('x');
 					}
+					*/
 
 					std::cout << "[DEBUG] ONNX inference completed for patch #" << patch_count << endl;
 				} catch (const Ort::Exception& e) {
@@ -1058,9 +1064,9 @@ void DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 
 void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes)
 {
-	std::vector<float> sigmas(3);
-	for (int i = 0; i < 3; ++i)
-		sigmas[i] = (patch_sizes[i] - 1) / 5.0f; // 使用W=5的高斯核
+	// 匹配Python版本：sigma_scale = 1/8
+	float sigma_scale = 1.0f / 8.0f;
+	float value_scaling_factor = 10.0f;
 
 	int64_t depth  = patch_sizes[0];
 	int64_t height = patch_sizes[1]; 
@@ -1071,10 +1077,14 @@ void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const 
 	float y_center = (height - 1) / 2.0f;
 	float x_center = (width - 1)  / 2.0f;
 
-	// 计算标准差参数
-	float z_sigma = depth  / 4.0f;
-	float y_sigma = height / 4.0f;
-	float x_sigma = width  / 4.0f;
+	// 使用与Python相同的sigma计算方法
+	float z_sigma = depth  * sigma_scale;
+	float y_sigma = height * sigma_scale;
+	float x_sigma = width  * sigma_scale;
+	
+	std::cout << "[DEBUG] Gaussian kernel parameters:" << endl;
+	std::cout << "  - Patch size: [" << depth << ", " << height << ", " << width << "]" << endl;
+	std::cout << "  - Sigmas: [" << z_sigma << ", " << y_sigma << ", " << x_sigma << "]" << endl;
 
 	float z_part = 0.f;
 	float y_part = 0.f;
@@ -1086,7 +1096,29 @@ void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const 
 		gaussisan_weight(x, y, z) = z_part * y_part * x_part;
 	}
 
-	gaussisan_weight /= gaussisan_weight.mean();
+	// 匹配Python的归一化方法：除以max再乘以value_scaling_factor
+	float max_val = gaussisan_weight.max();
+	if (max_val > 0) {
+		gaussisan_weight *= (value_scaling_factor / max_val);
+	}
+	
+	// 处理0值（匹配Python：将0值设置为最小非零值）
+	float min_non_zero = std::numeric_limits<float>::max();
+	cimg_forXYZ(gaussisan_weight, x, y, z) {
+		if (gaussisan_weight(x, y, z) > 0 && gaussisan_weight(x, y, z) < min_non_zero) {
+			min_non_zero = gaussisan_weight(x, y, z);
+		}
+	}
+	cimg_forXYZ(gaussisan_weight, x, y, z) {
+		if (gaussisan_weight(x, y, z) == 0) {
+			gaussisan_weight(x, y, z) = min_non_zero;
+		}
+	}
+	
+	std::cout << "[DEBUG] Gaussian weight statistics:" << endl;
+	std::cout << "  - Min: " << gaussisan_weight.min() << endl;
+	std::cout << "  - Max: " << gaussisan_weight.max() << endl;
+	std::cout << "  - Mean: " << gaussisan_weight.mean() << endl;
 }
 
 

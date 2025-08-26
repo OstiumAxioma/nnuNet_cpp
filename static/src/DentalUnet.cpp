@@ -198,6 +198,15 @@ bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
 		// 添加归一化相关参数
 		unetConfig.use_mask_for_norm = config.use_mask_for_norm;
 		
+		// 调试输出确认配置
+		std::cout << "[DEBUG] Configuration loaded from JSON:" << endl;
+		std::cout << "  - num_classes: " << unetConfig.num_classes << endl;
+		std::cout << "  - patch_size: [" << unetConfig.patch_size[0] << ", " 
+		          << unetConfig.patch_size[1] << ", " << unetConfig.patch_size[2] << "]" << endl;
+		std::cout << "  - normalization_type: " << unetConfig.normalization_type << endl;
+		std::cout << "  - use_mask_for_norm: " << (unetConfig.use_mask_for_norm ? "true" : "false") << endl;
+		std::cout << "  - mean: " << unetConfig.mean << ", std: " << unetConfig.std << endl;
+		
 		return true;
 	}
 	

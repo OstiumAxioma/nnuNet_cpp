@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <sstream>
 #include <cctype>
+#include <iostream>
 
 ModelConfig::ModelConfig() {
     setDefaults();
@@ -79,6 +80,22 @@ bool ConfigParser::parseJsonString(const std::string& jsonContent, ModelConfig& 
         }
         
         parseBoolValue(jsonContent, "use_tta", config.use_tta);
+        
+        // 解析 use_mask_for_norm（注意：它是一个数组）
+        size_t maskPos = jsonContent.find("\"use_mask_for_norm\":");
+        if (maskPos != std::string::npos) {
+            size_t arrayStart = jsonContent.find("[", maskPos);
+            size_t arrayEnd = jsonContent.find("]", arrayStart);
+            if (arrayStart != std::string::npos && arrayEnd != std::string::npos) {
+                std::string arrayContent = jsonContent.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
+                // 移除空白字符
+                arrayContent.erase(std::remove_if(arrayContent.begin(), arrayContent.end(), ::isspace), arrayContent.end());
+                // 如果数组包含 "true"，则设置为 true
+                config.use_mask_for_norm = (arrayContent.find("true") != std::string::npos);
+                std::cout << "[DEBUG] Parsed use_mask_for_norm: " << (config.use_mask_for_norm ? "true" : "false") << std::endl;
+            }
+        }
+        
         currentConfig = config;
         
         return true;

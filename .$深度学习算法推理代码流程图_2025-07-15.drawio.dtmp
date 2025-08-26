@@ -75,6 +75,12 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
+        <mxCell id="TwfHW-X3qN-zHyk_Xwm_-25" value="预处理阶段" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;verticalAlign=top;fontSize=24;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="1160" height="460" as="geometry" />
+        </mxCell>
+        <mxCell id="TwfHW-X3qN-zHyk_Xwm_-26" value="推理阶段" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;verticalAlign=top;fontSize=24;" vertex="1" parent="1">
+          <mxGeometry x="40" y="500" width="1160" height="360" as="geometry" />
+        </mxCell>
         <mxCell id="TwfHW-X3qN-zHyk_Xwm_-9" value="&lt;div&gt;- Python版本（json配置）：&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;使用ZScoreNormalization，且use_mask_for_norm=true&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; - 当使用mask时，只对非零区域计算mean和std&lt;/div&gt;&lt;div&gt;&amp;nbsp; &amp;nbsp; - 背景区域（mask==0）被设置为0&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
           <mxGeometry x="730" y="60" width="460" height="60" as="geometry" />
         </mxCell>
@@ -126,12 +132,6 @@
         </mxCell>
         <mxCell id="TwfHW-X3qN-zHyk_Xwm_-24" value="&lt;div&gt;ConfigParser.cpp 中的 parseJsonString 函数没有解析 use_mask_for_norm 字段。&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;use_mask_for_norm 是数组而非布尔值，&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;在json中，use_mask_for_norm 是一个数组 [true]，而不是简单的布尔值，需要特殊处理&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
           <mxGeometry x="270" y="380" width="440" height="70" as="geometry" />
-        </mxCell>
-        <mxCell id="TwfHW-X3qN-zHyk_Xwm_-25" value="预处理阶段" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;verticalAlign=top;fontSize=24;" vertex="1" parent="1">
-          <mxGeometry x="40" y="10" width="1160" height="460" as="geometry" />
-        </mxCell>
-        <mxCell id="TwfHW-X3qN-zHyk_Xwm_-26" value="推理阶段" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;verticalAlign=top;fontSize=24;" vertex="1" parent="1">
-          <mxGeometry x="40" y="500" width="1160" height="360" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

@@ -808,31 +808,95 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	int depth = normalized_volume.depth();
 	int width = normalized_volume.width();
 	int height = normalized_volume.height();
+	
+	// Padding步骤（匹配Python的pad_nd_image）
+	// 计算需要的padding以确保尺寸可被patch_size整除
+	int padded_depth = depth;
+	int padded_width = width;
+	int padded_height = height;
+	
+	// 如果尺寸小于patch_size，需要padding到至少patch_size
+	if (padded_depth < config.patch_size[0]) {
+		padded_depth = config.patch_size[0];
+	}
+	if (padded_height < config.patch_size[1]) {
+		padded_height = config.patch_size[1];
+	}
+	if (padded_width < config.patch_size[2]) {
+		padded_width = config.patch_size[2];
+	}
+	
+	// 计算padding量（居中padding，如果需要奇数padding，则"上"侧多padding 1）
+	int pad_depth_before = (padded_depth - depth) / 2;
+	int pad_depth_after = padded_depth - depth - pad_depth_before;
+	int pad_width_before = (padded_width - width) / 2;
+	int pad_width_after = padded_width - width - pad_width_before;
+	int pad_height_before = (padded_height - height) / 2;
+	int pad_height_after = padded_height - height - pad_height_before;
+	
+	// 创建padded volume
+	CImg<float> padded_volume(padded_width, padded_height, padded_depth, 1, 0.0f);
+	
+	// 复制原始数据到padded volume的中心
+	if (pad_depth_before >= 0 && pad_width_before >= 0 && pad_height_before >= 0) {
+		cimg_forXYZ(normalized_volume, x, y, z) {
+			padded_volume(x + pad_width_before, y + pad_height_before, z + pad_depth_before) = 
+				normalized_volume(x, y, z);
+		}
+	} else {
+		// 如果没有padding，直接使用原始volume
+		padded_volume = normalized_volume;
+	}
+	
+	std::cout << "[DEBUG] Padding information:" << endl;
+	std::cout << "  Original size: " << width << "x" << height << "x" << depth << endl;
+	std::cout << "  Padded size: " << padded_width << "x" << padded_height << "x" << padded_depth << endl;
+	std::cout << "  Padding: depth[" << pad_depth_before << "," << pad_depth_after 
+	          << "] width[" << pad_width_before << "," << pad_width_after 
+	          << "] height[" << pad_height_before << "," << pad_height_after << "]" << endl;
+	
+	// 使用padded dimensions进行后续计算
+	int working_depth = padded_depth;
+	int working_width = padded_width;
+	int working_height = padded_height;
 
 	// x图像宽度, y图像高度, z图像深度
 	float step_size_ratio = config.step_size_ratio;
+	
+	// 匹配Python的compute_steps_for_sliding_window逻辑
+	// 首先计算目标步长
+	float target_step_x = config.patch_size[2] * step_size_ratio;
+	float target_step_y = config.patch_size[1] * step_size_ratio;
+	float target_step_z = config.patch_size[0] * step_size_ratio;
+	
+	// 计算步数
+	int X_num_steps = std::max(1, (int)ceil(float(working_width - config.patch_size[2]) / target_step_x) + 1);
+	int Y_num_steps = std::max(1, (int)ceil(float(working_height - config.patch_size[1]) / target_step_y) + 1);
+	int Z_num_steps = std::max(1, (int)ceil(float(working_depth - config.patch_size[0]) / target_step_z) + 1);
+	
+	// 计算实际步长（匹配Python: 如果有多步，均匀分配）
 	float actualStepSize[3];
+	if (X_num_steps > 1) {
+		actualStepSize[0] = float(working_width - config.patch_size[2]) / (X_num_steps - 1);
+	} else {
+		actualStepSize[0] = 0;  // 只有一步时，始终在位置0
+	}
 	
-	// 使用与Python nnUNet相同的tile计算逻辑
-	// 直接计算步长：step = patch_size * step_size_ratio
-	// actualStepSize[0] = X轴 (宽度), actualStepSize[1] = Y轴 (高度), actualStepSize[2] = Z轴 (深度)
-	actualStepSize[0] = config.patch_size[2] * step_size_ratio;  // 宽度
-	actualStepSize[1] = config.patch_size[1] * step_size_ratio;  // 高度
-	actualStepSize[2] = config.patch_size[0] * step_size_ratio;  // 深度
+	if (Y_num_steps > 1) {
+		actualStepSize[1] = float(working_height - config.patch_size[1]) / (Y_num_steps - 1);
+	} else {
+		actualStepSize[1] = 0;
+	}
 	
-	// 计算步数：确保至少有1步，即使维度小于patch size
-	int X_num_steps = std::max(1, (int)ceil(float(width - config.patch_size[2]) / actualStepSize[0]) + 1);
-	int Y_num_steps = std::max(1, (int)ceil(float(height - config.patch_size[1]) / actualStepSize[1]) + 1);
-	int Z_num_steps = std::max(1, (int)ceil(float(depth - config.patch_size[0]) / actualStepSize[2]) + 1);
-	
-	// 当维度小于patch size时，调整步数为1
-	if (width <= config.patch_size[2]) X_num_steps = 1;
-	if (height <= config.patch_size[1]) Y_num_steps = 1;
-	if (depth <= config.patch_size[0]) Z_num_steps = 1;
+	if (Z_num_steps > 1) {
+		actualStepSize[2] = float(working_depth - config.patch_size[0]) / (Z_num_steps - 1);
+	} else {
+		actualStepSize[2] = 0;
+	}
 
 	if (NETDEBUG_FLAG) {
 		std::cout << "[DEBUG] Tile calculation:" << endl;
-		std::cout << "  Volume dimensions: " << width << "x" << height << "x" << depth << endl;
+		std::cout << "  Working volume dimensions (padded): " << working_width << "x" << working_height << "x" << working_depth << endl;
 		std::cout << "  Patch size: " << config.patch_size[2] << "x" << config.patch_size[1] << "x" << config.patch_size[0] << " (WxHxD)" << endl;
 		std::cout << "  Step size ratio: " << step_size_ratio << endl;
 		std::cout << "  Actual step sizes: X=" << actualStepSize[0] << ", Y=" << actualStepSize[1] << ", Z=" << actualStepSize[2] << endl;
@@ -841,9 +905,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		std::cout << "  TTA (use_mirroring): " << (config.use_mirroring ? "enabled (NOT IMPLEMENTED)" : "disabled") << endl;
 	}
 
-	//初始化输出概率体
-	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
-	CImg<float> count_vol = CImg<float>(width, height, depth, 1, 0.f);
+	//初始化输出概率体（使用padded dimensions）
+	CImg<float> padded_output_prob = CImg<float>(working_width, working_height, working_depth, config.num_classes, 0.f);
+	CImg<float> count_vol = CImg<float>(working_width, working_height, working_depth, 1, 0.f);
 	//std::cout << "predSegProbVolume shape: " << depth << width << height << endl;
 
 	//CImg<float> input_patch = CImg<float>(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.f);
@@ -859,9 +923,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	for (int sz = 0; sz < Z_num_steps; sz++)
 	{
 		int lb_z = (int)std::round(sz * actualStepSize[2]);
-		// 确保不超出边界
-		if (lb_z + config.patch_size[0] > depth) {
-			lb_z = depth - config.patch_size[0];
+		// 确保不超出边界（使用padded dimensions）
+		if (lb_z + config.patch_size[0] > working_depth) {
+			lb_z = working_depth - config.patch_size[0];
 		}
 		lb_z = std::max(0, lb_z);
 		int ub_z = lb_z + config.patch_size[0] - 1;
@@ -869,9 +933,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		for (int sy = 0; sy < Y_num_steps; sy++)
 		{
 			int lb_y = (int)std::round(sy * actualStepSize[1]);
-			// 确保不超出边界
-			if (lb_y + config.patch_size[1] > height) {
-				lb_y = height - config.patch_size[1];
+			// 确保不超出边界（使用padded dimensions）
+			if (lb_y + config.patch_size[1] > working_height) {
+				lb_y = working_height - config.patch_size[1];
 			}
 			lb_y = std::max(0, lb_y);
 			int ub_y = lb_y + config.patch_size[1] - 1;
@@ -879,9 +943,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 			for (int sx = 0; sx < X_num_steps; sx++)
 			{
 				int lb_x = (int)std::round(sx * actualStepSize[0]);
-				// 确保不超出边界
-				if (lb_x + config.patch_size[2] > width) {
-					lb_x = width - config.patch_size[2];
+				// 确保不超出边界（使用padded dimensions）
+				if (lb_x + config.patch_size[2] > working_width) {
+					lb_x = working_width - config.patch_size[2];
 				}
 				lb_x = std::max(0, lb_x);
 				int ub_x = lb_x + config.patch_size[2] - 1;
@@ -894,7 +958,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 				CImg<float> input_patch;
 				try {
-					input_patch = normalized_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
+					input_patch = padded_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
 					//std::cout << "input_patch mean: " << input_patch.mean() << endl;
 					//std::cout << "input_patch variance: " << input_patch.variance() << endl;
 					std::cout << "input_patch dimensions: " << input_patch.width() << "x" << input_patch.height() << "x" << input_patch.depth() << endl;
@@ -1011,13 +1075,13 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						int gy = lb_y + y;
 						int gz = lb_z + z;
 						
-						// 写入前验证边界
-						if (gx < 0 || gx >= width || gy < 0 || gy >= height || gz < 0 || gz >= depth) {
+						// 写入前验证边界（使用padded dimensions）
+						if (gx < 0 || gx >= working_width || gy < 0 || gy >= working_height || gz < 0 || gz >= working_depth) {
 							std::cerr << "[ERROR] Out of bounds write attempt: (" << gx << ", " << gy << ", " << gz << ")" << endl;
 							return DentalCbctSegAI_STATUS_FAIED;
 						}
 						
-						predicted_output_prob(gx, gy, gz, c) += (win_pob(x, y, z, c) * gaussisan_weight(x, y, z));
+						padded_output_prob(gx, gy, gz, c) += (win_pob(x, y, z, c) * gaussisan_weight(x, y, z));
 					}
 					cimg_forXYZ(gaussisan_weight, x, y, z) {
 						count_vol(lb_x + x, lb_y + y, lb_z + z) += gaussisan_weight(x, y, z);
@@ -1031,9 +1095,24 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	}
 
 	//归一化
-	cimg_forXYZC(predicted_output_prob, x, y, z, c) {
-		predicted_output_prob(x, y, z, c) /= count_vol(x, y, z);
+	cimg_forXYZC(padded_output_prob, x, y, z, c) {
+		padded_output_prob(x, y, z, c) /= count_vol(x, y, z);
 	}
+	
+	// 从padded结果中提取原始尺寸的输出（移除padding）
+	predicted_output_prob = CImg<float>(width, height, depth, config.num_classes, 0.f);
+	if (pad_depth_before >= 0 && pad_width_before >= 0 && pad_height_before >= 0) {
+		cimg_forXYZC(predicted_output_prob, x, y, z, c) {
+			predicted_output_prob(x, y, z, c) = padded_output_prob(x + pad_width_before, 
+			                                                        y + pad_height_before, 
+			                                                        z + pad_depth_before, c);
+		}
+	} else {
+		predicted_output_prob = padded_output_prob;
+	}
+	
+	std::cout << "[DEBUG] Removed padding, final output size: " << predicted_output_prob.width() 
+	          << "x" << predicted_output_prob.height() << "x" << predicted_output_prob.depth() << endl;
 	std::cout << "Sliding window inference is done." << endl;
 
 	return DentalCbctSegAI_STATUS_SUCCESS;

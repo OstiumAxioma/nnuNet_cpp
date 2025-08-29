@@ -134,7 +134,10 @@ void DentalUnet::setIntensityProperties(float mean, float std, float min_val, fl
 {
 	unetConfig.mean_std_HU = { mean, std };
 	unetConfig.min_max_HU = { min_val, max_val };
-	// percentile值暂时存储在mean_std_HU中，实际使用时需要根据normalization_type决定
+	unetConfig.percentile_00_5 = static_cast<double>(percentile_00_5);
+	unetConfig.percentile_99_5 = static_cast<double>(percentile_99_5);
+	unetConfig.mean = static_cast<double>(mean);
+	unetConfig.std = static_cast<double>(std);
 }
 
 void DentalUnet::setUseMirroring(bool use_mirroring)
@@ -194,9 +197,11 @@ bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
 		unetConfig.min_max_HU.push_back(config.min_val);
 		unetConfig.min_max_HU.push_back(config.max_val);
 		
-		// 添加直接访问的intensity properties到config
-		unetConfig.mean = config.mean;
-		unetConfig.std = config.std;
+		// 添加直接访问的intensity properties到config（转换为double）
+		unetConfig.mean = static_cast<double>(config.mean);
+		unetConfig.std = static_cast<double>(config.std);
+		unetConfig.percentile_00_5 = static_cast<double>(config.percentile_00_5);
+		unetConfig.percentile_99_5 = static_cast<double>(config.percentile_99_5);
 		
 		// 添加归一化相关参数
 		unetConfig.use_mask_for_norm = config.use_mask_for_norm;
@@ -615,14 +620,14 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 			// 在mask区域动态计算
 			std::cout << "[DEBUG] Will calculate on mask region in normalization step" << endl;
 			// 这里暂不计算，将在segModelInfer的归一化步骤中动态计算
-			intensity_mean = 0.0f;  // 占位值
-			intensity_std = 1.0f;   // 占位值
+			intensity_mean = 0.0;  // 占位值
+			intensity_std = 1.0;   // 占位值
 		} else {
 			// 在整个裁剪后的数据上动态计算
-			intensity_mean = (float)cropped_volume.mean();
-			intensity_std = (float)cropped_volume.variance();
-			intensity_std = std::sqrt(intensity_std);
-			if (intensity_std < 1e-8f) intensity_std = 1e-8f;  // 匹配Python的max(std, 1e-8)
+			intensity_mean = cropped_volume.mean();  // CImg::mean()返回double
+			double var = cropped_volume.variance();  // CImg::variance()返回double
+			intensity_std = std::sqrt(var);
+			if (intensity_std < 1e-8) intensity_std = 1e-8;  // 匹配Python的max(std, 1e-8)
 			std::cout << "[DEBUG] Dynamically calculated global stats: mean=" 
 			          << intensity_mean << ", std=" << intensity_std << endl;
 		}
@@ -638,10 +643,10 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 	} else {
 		// 默认行为：动态计算
 		std::cout << "[DEBUG] Unknown normalization type, using dynamic calculation" << endl;
-		intensity_mean = (float)cropped_volume.mean();
-		intensity_std = (float)cropped_volume.variance();
-		intensity_std = std::sqrt(intensity_std);
-		if (intensity_std < 1e-8f) intensity_std = 1e-8f;
+		intensity_mean = cropped_volume.mean();  // CImg::mean()返回double
+		double var = cropped_volume.variance();  // CImg::variance()返回double
+		intensity_std = std::sqrt(var);
+		if (intensity_std < 1e-8) intensity_std = 1e-8;
 		std::cout << "[DEBUG] Dynamically calculated stats: mean=" 
 		          << intensity_mean << ", std=" << intensity_std << endl;
 	}
@@ -1452,16 +1457,28 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 
 void DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 {
-	//HU值裁剪
-	float min_hu4dentalCTNormalization = config.min_max_HU[0];
-	float max_hu4dentalCTNormalization = config.min_max_HU[1];
-	input_volume.cut(min_hu4dentalCTNormalization, max_hu4dentalCTNormalization);
+	//使用percentile值进行裁剪（与Python版本一致）
+	double lower_bound = config.percentile_00_5;
+	double upper_bound = config.percentile_99_5;
+	
+	std::cout << "[DEBUG] CTNormalization parameters:" << endl;
+	std::cout << "  - lower_bound (percentile_00_5): " << lower_bound << endl;
+	std::cout << "  - upper_bound (percentile_99_5): " << upper_bound << endl;
+	std::cout << "  - mean: " << config.mean_std_HU[0] << endl;
+	std::cout << "  - std: " << config.mean_std_HU[1] << endl;
+	std::cout << "  - Data range before clipping: [" << input_volume.min() << ", " << input_volume.max() << "]" << endl;
+	
+	input_volume.cut(lower_bound, upper_bound);
+	
+	std::cout << "  - Data range after clipping: [" << input_volume.min() << ", " << input_volume.max() << "]" << endl;
 
-	//应用z-score标准化
-	float mean_hu4dentalCTNormalization = config.mean_std_HU[0];
-	float std_hu4dentalCTNormalization = config.mean_std_HU[1];
+	//应用z-score标准化（使用double提高精度）
+	double mean_hu4dentalCTNormalization = config.mean_std_HU[0];
+	double std_hu4dentalCTNormalization = config.mean_std_HU[1];
 	input_volume -= mean_hu4dentalCTNormalization;
 	input_volume /= std_hu4dentalCTNormalization;
+	
+	std::cout << "  - Data range after normalization: [" << input_volume.min() << ", " << input_volume.max() << "]" << endl;
 }
 
 

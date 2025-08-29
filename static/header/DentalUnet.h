@@ -54,8 +54,12 @@ struct nnUNetConfig {
 	std::vector<float> mean_std_HU;
 	
 	// 直接访问的intensity properties
-	float mean;
-	float std;
+	double mean;  // 改为double提高精度
+	double std;   // 改为double提高精度
+	
+	// percentile值用于CT归一化裁剪
+	double percentile_00_5;  // 改为double提高精度
+	double percentile_99_5;  // 改为double提高精度
 	
 	// 归一化相关参数
 	bool use_mask_for_norm;
@@ -113,8 +117,8 @@ private:
 	//输入：原始CBCT体数据
 	CImg<short> input_cbct_volume;
 
-	float intensity_mean;
-	float intensity_std;
+	double intensity_mean;  // 改为double提高精度
+	double intensity_std;   // 改为double提高精度
 	
 	// 预处理相关成员变量
 	CropBBox crop_bbox;  // 保存裁剪边界信息

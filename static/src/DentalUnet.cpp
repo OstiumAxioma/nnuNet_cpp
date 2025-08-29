@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <queue>
+#include <tuple>
 
 DentalUnet::DentalUnet()
 {
@@ -375,6 +377,102 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
 
+// 简单的3D binary_fill_holes实现（匹配scipy.ndimage.binary_fill_holes）
+void binary_fill_holes_3d(CImg<bool>& mask) {
+	// 使用flood fill从边界开始，标记所有外部背景
+	// 未被标记的背景即为内部孔洞
+	
+	int width = mask.width();
+	int height = mask.height();
+	int depth = mask.depth();
+	
+	// 创建visited标记
+	CImg<bool> visited(width, height, depth, 1, false);
+	std::queue<std::tuple<int, int, int>> queue;
+	
+	// 从所有边界的背景点开始flood fill
+	// X边界 (x=0 和 x=width-1)
+	for (int y = 0; y < height; y++) {
+		for (int z = 0; z < depth; z++) {
+			if (!mask(0, y, z) && !visited(0, y, z)) {
+				queue.push(std::make_tuple(0, y, z));
+				visited(0, y, z) = true;
+			}
+			if (!mask(width-1, y, z) && !visited(width-1, y, z)) {
+				queue.push(std::make_tuple(width-1, y, z));
+				visited(width-1, y, z) = true;
+			}
+		}
+	}
+	
+	// Y边界 (y=0 和 y=height-1)
+	for (int x = 0; x < width; x++) {
+		for (int z = 0; z < depth; z++) {
+			if (!mask(x, 0, z) && !visited(x, 0, z)) {
+				queue.push(std::make_tuple(x, 0, z));
+				visited(x, 0, z) = true;
+			}
+			if (!mask(x, height-1, z) && !visited(x, height-1, z)) {
+				queue.push(std::make_tuple(x, height-1, z));
+				visited(x, height-1, z) = true;
+			}
+		}
+	}
+	
+	// Z边界 (z=0 和 z=depth-1)
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			if (!mask(x, y, 0) && !visited(x, y, 0)) {
+				queue.push(std::make_tuple(x, y, 0));
+				visited(x, y, 0) = true;
+			}
+			if (!mask(x, y, depth-1) && !visited(x, y, depth-1)) {
+				queue.push(std::make_tuple(x, y, depth-1));
+				visited(x, y, depth-1) = true;
+			}
+		}
+	}
+	
+	// BFS找到所有连接到边界的背景点
+	while (!queue.empty()) {
+		auto [x, y, z] = queue.front();
+		queue.pop();
+		
+		// 检查6个邻居（3D中的6连通）
+		int dx[] = {-1, 1, 0, 0, 0, 0};
+		int dy[] = {0, 0, -1, 1, 0, 0};
+		int dz[] = {0, 0, 0, 0, -1, 1};
+		
+		for (int i = 0; i < 6; i++) {
+			int nx = x + dx[i];
+			int ny = y + dy[i];
+			int nz = z + dz[i];
+			
+			// 检查边界条件
+			if (nx >= 0 && nx < width && 
+			    ny >= 0 && ny < height && 
+			    nz >= 0 && nz < depth) {
+				// 如果是背景且未访问过
+				if (!mask(nx, ny, nz) && !visited(nx, ny, nz)) {
+					queue.push(std::make_tuple(nx, ny, nz));
+					visited(nx, ny, nz) = true;
+				}
+			}
+		}
+	}
+	
+	// 填充所有内部孔洞（未被访问的背景点）
+	int filled_count = 0;
+	cimg_forXYZ(mask, x, y, z) {
+		if (!mask(x, y, z) && !visited(x, y, z)) {
+			mask(x, y, z) = true;  // 填充孔洞
+			filled_count++;
+		}
+	}
+	
+	std::cout << "[DEBUG] binary_fill_holes filled " << filled_count << " pixels" << endl;
+}
+
 // 实现crop_to_nonzero函数，与Python版本对齐
 CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox) {
 	// 找到非零区域的边界
@@ -385,9 +483,24 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 	bbox.z_min = input.depth();
 	bbox.z_max = -1;
 	
+	// 创建非零mask（与Python的nonzero_mask对应）
+	CImg<bool> nonzero_mask(input.width(), input.height(), input.depth(), 1, false);
+	
 	// 扫描整个体积找到非零区域
 	cimg_forXYZ(input, x, y, z) {
 		if (input(x, y, z) != 0) {
+			nonzero_mask(x, y, z) = true;
+		}
+	}
+	
+	// 应用binary_fill_holes（与Python的scipy.ndimage.binary_fill_holes一致）
+	// 暂时禁用以测试是否是fill hole导致的差异
+	// binary_fill_holes_3d(nonzero_mask);
+	std::cout << "[DEBUG] binary_fill_holes DISABLED for testing" << endl;
+	
+	// 重新计算bbox（基于填充后的mask）
+	cimg_forXYZ(input, x, y, z) {
+		if (nonzero_mask(x, y, z)) {
 			if (x < bbox.x_min) bbox.x_min = x;
 			if (x > bbox.x_max) bbox.x_max = x;
 			if (y < bbox.y_min) bbox.y_min = y;
@@ -405,6 +518,9 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 		bbox.z_min = 0; bbox.z_max = input.depth() - 1;
 		std::cout << "[WARNING] Full volume bbox set to: X[0:" << bbox.x_max 
 		          << "], Y[0:" << bbox.y_max << "], Z[0:" << bbox.z_max << "]" << endl;
+		
+		// 创建全为0的seg_mask（因为全是背景）
+		seg_mask = CImg<short>(input.width(), input.height(), input.depth(), 1, -1);
 		return input;
 	}
 	
@@ -418,6 +534,12 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 		bbox.x_min = 0; bbox.x_max = input.width() - 1;
 		bbox.y_min = 0; bbox.y_max = input.height() - 1;
 		bbox.z_min = 0; bbox.z_max = input.depth() - 1;
+		
+		// 创建seg_mask
+		seg_mask = CImg<short>(input.width(), input.height(), input.depth(), 1);
+		cimg_forXYZ(seg_mask, x, y, z) {
+			seg_mask(x, y, z) = (input(x, y, z) != 0) ? 0 : -1;
+		}
 		return input;
 	}
 	
@@ -428,6 +550,27 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 	// 执行裁剪
 	CImg<short> cropped = input.get_crop(bbox.x_min, bbox.y_min, bbox.z_min, 
 	                                     bbox.x_max, bbox.y_max, bbox.z_max);
+	
+	// 裁剪nonzero_mask
+	CImg<bool> cropped_mask = nonzero_mask.get_crop(bbox.x_min, bbox.y_min, bbox.z_min,
+	                                                bbox.x_max, bbox.y_max, bbox.z_max);
+	
+	// 创建seg_mask（与Python的seg对应）
+	// Python: seg = np.where(nonzero_mask, np.int8(0), np.int8(nonzero_label=-1))
+	seg_mask = CImg<short>(cropped.width(), cropped.height(), cropped.depth(), 1);
+	cimg_forXYZ(cropped, x, y, z) {
+		// 使用填充后的mask：mask区域设为0，背景设为-1（与Python一致）
+		seg_mask(x, y, z) = cropped_mask(x, y, z) ? 0 : -1;
+	}
+	
+	// 统计seg_mask信息用于调试
+	int seg_zero_count = 0, seg_neg_count = 0;
+	cimg_forXYZ(seg_mask, x, y, z) {
+		if (seg_mask(x, y, z) == 0) seg_zero_count++;
+		else if (seg_mask(x, y, z) == -1) seg_neg_count++;
+	}
+	std::cout << "[DEBUG] seg_mask created: " << seg_zero_count << " pixels with value 0 (nonzero region), " 
+	          << seg_neg_count << " pixels with value -1 (background)" << endl;
 	                                     
 	std::cout << "[DEBUG] Shape after cropping: " << cropped.width() << "x" 
 	          << cropped.height() << "x" << cropped.depth() << endl;
@@ -461,30 +604,46 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 	
 	// 3. 在裁剪后的数据上计算或使用配置的归一化参数
 	std::cout << "[DEBUG] Step 3: Determine intensity statistics strategy" << endl;
+	std::cout << "[DEBUG] Normalization type: " << unetConfig.normalization_type << endl;
 	
-	if (unetConfig.use_mask_for_norm) {
-		// 当use_mask_for_norm=true时，总是动态计算（匹配Python行为）
-		std::cout << "[DEBUG] use_mask_for_norm=true, will calculate dynamically in normalization step" << endl;
-		// 不在这里计算，将在segModelInfer的归一化步骤中动态计算
-		intensity_mean = 0.0f;  // 占位值，实际不会使用
-		intensity_std = 1.0f;   // 占位值，实际不会使用
-	} else {
-		// 当use_mask_for_norm=false时，使用JSON配置或计算全局统计
-		if (std::abs(unetConfig.mean) > 0.001f || std::abs(unetConfig.std - 1.0f) > 0.001f) {
-			// 使用JSON配置中的参数
-			intensity_mean = unetConfig.mean;
-			intensity_std = unetConfig.std;
-			std::cout << "[DEBUG] Using configured intensity properties from JSON: mean=" 
-			          << intensity_mean << ", std=" << intensity_std << endl;
+	// 根据归一化类型决定是否使用JSON配置的值
+	if (unetConfig.normalization_type == "ZScoreNormalization") {
+		// ZScoreNormalization总是动态计算mean和std（MRI等模态）
+		std::cout << "[DEBUG] ZScoreNormalization detected - will dynamically calculate mean/std" << endl;
+		
+		if (unetConfig.use_mask_for_norm) {
+			// 在mask区域动态计算
+			std::cout << "[DEBUG] Will calculate on mask region in normalization step" << endl;
+			// 这里暂不计算，将在segModelInfer的归一化步骤中动态计算
+			intensity_mean = 0.0f;  // 占位值
+			intensity_std = 1.0f;   // 占位值
 		} else {
-			// 计算全局统计
+			// 在整个裁剪后的数据上动态计算
 			intensity_mean = (float)cropped_volume.mean();
 			intensity_std = (float)cropped_volume.variance();
 			intensity_std = std::sqrt(intensity_std);
-			if (intensity_std < 0.0001f) intensity_std = 0.0001f;
-			std::cout << "[DEBUG] Computed global intensity statistics: mean=" 
+			if (intensity_std < 1e-8f) intensity_std = 1e-8f;  // 匹配Python的max(std, 1e-8)
+			std::cout << "[DEBUG] Dynamically calculated global stats: mean=" 
 			          << intensity_mean << ", std=" << intensity_std << endl;
 		}
+	} else if (unetConfig.normalization_type == "CTNormalization" || 
+	           unetConfig.normalization_type == "CT" || 
+	           unetConfig.normalization_type == "ct") {
+		// CTNormalization使用JSON配置的值（CT等标准化模态）
+		std::cout << "[DEBUG] CTNormalization detected - using JSON intensity_properties" << endl;
+		intensity_mean = unetConfig.mean;
+		intensity_std = unetConfig.std;
+		std::cout << "[DEBUG] Using configured intensity properties: mean=" 
+		          << intensity_mean << ", std=" << intensity_std << endl;
+	} else {
+		// 默认行为：动态计算
+		std::cout << "[DEBUG] Unknown normalization type, using dynamic calculation" << endl;
+		intensity_mean = (float)cropped_volume.mean();
+		intensity_std = (float)cropped_volume.variance();
+		intensity_std = std::sqrt(intensity_std);
+		if (intensity_std < 1e-8f) intensity_std = 1e-8f;
+		std::cout << "[DEBUG] Dynamically calculated stats: mean=" 
+		          << intensity_mean << ", std=" << intensity_std << endl;
 	}
 
 	// 4. 调用推理（包含归一化和重采样）
@@ -561,6 +720,104 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	CImg<float> normalized_volume;
 	normalized_volume.assign(input_volume);  // 转换为float
 	
+	// 保存归一化前的数据
+	if (saveIntermediateResults) {
+		savePreprocessedData(normalized_volume, L"before_normalization");
+	}
+	
+	// 输出归一化前的统计信息
+	std::cout << "[DEBUG] === BEFORE NORMALIZATION ===" << endl;
+	std::cout << "[DEBUG] Data shape: " << normalized_volume.width() << "x" 
+	          << normalized_volume.height() << "x" << normalized_volume.depth() << endl;
+	std::cout << "[DEBUG] Data min: " << normalized_volume.min() << endl;
+	std::cout << "[DEBUG] Data max: " << normalized_volume.max() << endl;
+	std::cout << "[DEBUG] Data mean: " << normalized_volume.mean() << endl;
+	std::cout << "[DEBUG] Data std: " << std::sqrt(normalized_volume.variance()) << endl;
+	
+	// 输出seg_mask的维度以确认它与normalized_volume匹配
+	std::cout << "[DEBUG] seg_mask shape: " << seg_mask.width() << "x" 
+	          << seg_mask.height() << "x" << seg_mask.depth() << endl;
+	
+	// 统计seg_mask的值分布
+	int seg_positive = 0, seg_negative = 0, seg_zero = 0;
+	cimg_forXYZ(seg_mask, x, y, z) {
+		if (seg_mask(x, y, z) > 0) seg_positive++;
+		else if (seg_mask(x, y, z) < 0) seg_negative++;
+		else seg_zero++;
+	}
+	std::cout << "[DEBUG] seg_mask value distribution: positive=" << seg_positive 
+	          << ", zero=" << seg_zero << ", negative=" << seg_negative << endl;
+	
+	// 计算非零区域的统计（用于对比）
+	// 使用seg_mask判断前景区域，与Python一致
+	int nonzero_count = 0;
+	double nonzero_sum = 0.0;  // 使用double提高精度
+	cimg_forXYZ(normalized_volume, x, y, z) {
+		// seg_mask >= 0 表示前景区域（包括值为0的前景像素）
+		if (seg_mask(x, y, z) >= 0) {
+			nonzero_sum += normalized_volume(x, y, z);
+			nonzero_count++;
+		}
+	}
+	if (nonzero_count > 0) {
+		double nonzero_mean = nonzero_sum / nonzero_count;
+		double nonzero_var = 0.0;
+		cimg_forXYZ(normalized_volume, x, y, z) {
+			if (seg_mask(x, y, z) >= 0) {
+				double diff = normalized_volume(x, y, z) - nonzero_mean;
+				nonzero_var += diff * diff;
+			}
+		}
+		double nonzero_std = std::sqrt(nonzero_var / nonzero_count);
+		std::cout << "[DEBUG] Non-zero region stats (using seg_mask>=0): mean=" << nonzero_mean 
+		          << ", std=" << nonzero_std << ", pixels=" << nonzero_count << endl;
+		
+		// 也计算使用简单>0判断的统计作为对比
+		int simple_count = 0;
+		double simple_sum = 0.0;  // 使用double提高精度
+		cimg_forXYZ(normalized_volume, x, y, z) {
+			if (normalized_volume(x, y, z) > 0) {
+				simple_sum += normalized_volume(x, y, z);
+				simple_count++;
+			}
+		}
+		if (simple_count > 0) {
+			double simple_mean = simple_sum / simple_count;
+			double simple_var = 0.0;
+			cimg_forXYZ(normalized_volume, x, y, z) {
+				if (normalized_volume(x, y, z) > 0) {
+					double diff = normalized_volume(x, y, z) - simple_mean;
+					simple_var += diff * diff;
+				}
+			}
+			double simple_std = std::sqrt(simple_var / simple_count);
+			std::cout << "[DEBUG] Non-zero region stats (using value>0): mean=" << simple_mean 
+			          << ", std=" << simple_std << ", pixels=" << simple_count << endl;
+		}
+	}
+	
+	// 输出特定位置的值（用于精确对比）
+	if (normalized_volume.depth() > 2 && normalized_volume.height() > 162 && normalized_volume.width() > 44) {
+		std::cout << "[DEBUG] Value at (44,162,2) before norm: " << normalized_volume(44, 162, 2) << endl;
+		std::cout << "[DEBUG] seg_mask at (44,162,2): " << seg_mask(44, 162, 2) << endl;
+	}
+	
+	// 输出一些采样点的值用于对比
+	std::cout << "[DEBUG] Sample points before normalization:" << endl;
+	for (int i = 0; i < 5 && i < normalized_volume.depth(); i++) {
+		for (int j = 0; j < 5 && j < normalized_volume.height(); j++) {
+			for (int k = 0; k < 5 && k < normalized_volume.width(); k++) {
+				if (normalized_volume(k, j, i) != 0) {
+					std::cout << "  (" << k << "," << j << "," << i << "): value=" 
+					          << normalized_volume(k, j, i) << ", seg=" << seg_mask(k, j, i) << endl;
+					break;
+				}
+			}
+		}
+	}
+	
+	std::cout << "[DEBUG] ================================" << endl;
+	
 	// 执行归一化
 	std::map<std::string, int> normalizationOptionsMap = {
 		{"CTNormalization",     10},
@@ -588,15 +845,18 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		std::cout << "[DEBUG] Using Z-Score Normalization" << endl;
 		if (config.use_mask_for_norm) {
 			std::cout << "[DEBUG] Using mask-based normalization (dynamic calculation)" << endl;
-			// 创建mask（非零区域）
+			// 使用seg_mask创建mask（与Python一致：seg >= 0表示非零区域）
+			// Python: mask = seg[0] >= 0
 			CImg<bool> mask(normalized_volume.width(), normalized_volume.height(), normalized_volume.depth());
 			cimg_forXYZ(normalized_volume, x, y, z) {
-				mask(x, y, z) = (normalized_volume(x, y, z) > 0);
+				// seg_mask中：0表示非零区域，-1表示背景
+				// 所以seg_mask >= 0就是非零区域
+				mask(x, y, z) = (seg_mask(x, y, z) >= 0);
 			}
 			
 			// 在mask区域动态计算mean和std（匹配Python行为）
-			float mask_mean = 0.0f;
-			float mask_std = 0.0f;
+			double mask_mean = 0.0;  // 使用double提高精度
+			double mask_std = 0.0;
 			int mask_count = 0;
 			
 			// 计算mask区域的mean
@@ -613,15 +873,24 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 				// 计算mask区域的std
 				cimg_forXYZ(normalized_volume, x, y, z) {
 					if (mask(x, y, z)) {
-						float diff = normalized_volume(x, y, z) - mask_mean;
+						double diff = normalized_volume(x, y, z) - mask_mean;
 						mask_std += diff * diff;
 					}
 				}
 				mask_std = std::sqrt(mask_std / mask_count);
-				if (mask_std < 1e-8f) mask_std = 1e-8f;  // 匹配Python的max(std, 1e-8)
+				if (mask_std < 1e-8) mask_std = 1e-8;  // 匹配Python的max(std, 1e-8)
 				
 				std::cout << "[DEBUG] Dynamically calculated mask-based stats: mean=" << mask_mean 
 				          << ", std=" << mask_std << ", mask_pixels=" << mask_count << endl;
+				
+				// 验证seg_mask的统计信息
+				int seg_positive = 0, seg_negative = 0;
+				cimg_forXYZ(seg_mask, x, y, z) {
+					if (seg_mask(x, y, z) >= 0) seg_positive++;
+					else seg_negative++;
+				}
+				std::cout << "[DEBUG] seg_mask stats: " << seg_positive << " pixels >= 0, " 
+				          << seg_negative << " pixels < 0" << endl;
 				
 				// 只对mask区域进行归一化，背景设为0
 				cimg_forXYZ(normalized_volume, x, y, z) {
@@ -650,8 +919,60 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		normalized_volume /= intensity_std;
 		break;
 	}
-	std::cout << "normalized_volume mean: " << normalized_volume.mean() << endl;
-	std::cout << "normalized_volume variance: " << normalized_volume.variance() << endl;
+	
+	// 输出归一化后的详细统计信息
+	std::cout << "[DEBUG] === AFTER NORMALIZATION ===" << endl;
+	std::cout << "[DEBUG] Data shape: " << normalized_volume.width() << "x" 
+	          << normalized_volume.height() << "x" << normalized_volume.depth() << endl;
+	std::cout << "[DEBUG] Data min: " << normalized_volume.min() << endl;
+	std::cout << "[DEBUG] Data max: " << normalized_volume.max() << endl;
+	std::cout << "[DEBUG] Data mean: " << normalized_volume.mean() << endl;
+	std::cout << "[DEBUG] Data std: " << std::sqrt(normalized_volume.variance()) << endl;
+	
+	// 计算非零区域的统计（用于对比）
+	// 使用seg_mask判断前景区域，与Python一致
+	int nonzero_count_after = 0;
+	double nonzero_sum_after = 0.0;  // 使用double提高精度
+	cimg_forXYZ(normalized_volume, x, y, z) {
+		// seg_mask >= 0 表示前景区域
+		if (seg_mask(x, y, z) >= 0) {
+			nonzero_sum_after += normalized_volume(x, y, z);
+			nonzero_count_after++;
+		}
+	}
+	if (nonzero_count_after > 0) {
+		double nonzero_mean_after = nonzero_sum_after / nonzero_count_after;
+		double nonzero_var_after = 0.0;
+		cimg_forXYZ(normalized_volume, x, y, z) {
+			if (seg_mask(x, y, z) >= 0) {
+				double diff = normalized_volume(x, y, z) - nonzero_mean_after;
+				nonzero_var_after += diff * diff;
+			}
+		}
+		double nonzero_std_after = std::sqrt(nonzero_var_after / nonzero_count_after);
+		std::cout << "[DEBUG] Non-zero region stats after norm: mean=" << nonzero_mean_after 
+		          << ", std=" << nonzero_std_after << ", pixels=" << nonzero_count_after << endl;
+	}
+	
+	// 输出特定位置的值（用于精确对比）
+	if (normalized_volume.depth() > 2 && normalized_volume.height() > 162 && normalized_volume.width() > 44) {
+		std::cout << "[DEBUG] Value at (44,162,2) after norm: " << normalized_volume(44, 162, 2) << endl;
+	}
+	
+	// 输出一些采样点的归一化后值用于对比
+	std::cout << "[DEBUG] Sample points after normalization:" << endl;
+	for (int i = 0; i < 5 && i < normalized_volume.depth(); i++) {
+		for (int j = 0; j < 5 && j < normalized_volume.height(); j++) {
+			for (int k = 0; k < 5 && k < normalized_volume.width(); k++) {
+				if (std::abs(normalized_volume(k, j, i)) > 0.01) {  // 归一化后可能接近0
+					std::cout << "  (" << k << "," << j << "," << i << "): value=" 
+					          << normalized_volume(k, j, i) << endl;
+					break;
+				}
+			}
+		}
+	}
+	std::cout << "[DEBUG] ================================" << endl;
 
 	// Step 2: 重采样（在归一化后进行）
 	std::cout << "[DEBUG] Step 2: Resampling (after normalization)" << endl;
@@ -706,6 +1027,9 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 
 	// 保存预处理数据
 	if (saveIntermediateResults) {
+		// 保存归一化后但重采样前的数据（用于精确对比）
+		savePreprocessedData(normalized_volume, L"after_normalization_before_resample");
+		// 保存最终的预处理数据
 		savePreprocessedData(scaled_input_volume, L"preprocessed_normalized_volume");
 	}
 

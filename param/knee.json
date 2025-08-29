@@ -28,10 +28,10 @@
     ],
     "intensity_properties": {
         "0": {
-            "max": 1824.9935302734375,
+            "max": 2775.00244140625,
             "mean": 274.2257080078125,
-            "median": 274.2257080078125,
-            "min": -172.01852416992188,
+            "median": 167.0,
+            "min": -902.0133666992188,
             "percentile_00_5": -172.01852416992188,
             "percentile_99_5": 1824.9935302734375,
             "std": 366.05450439453125
@@ -57,5 +57,6 @@
         "order_z": 0,
         "force_separate_z": null
     },
-    "use_tta": false
+    "use_tta": false,
+    "configuration": "3d_fullres"
 }

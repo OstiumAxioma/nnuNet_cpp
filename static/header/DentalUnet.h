@@ -118,6 +118,7 @@ private:
 	
 	// 预处理相关成员变量
 	CropBBox crop_bbox;  // 保存裁剪边界信息
+	CImg<short> seg_mask;  // 用于归一化的mask（与Python的seg对应）
 
 	int Width0;
 	int Height0;

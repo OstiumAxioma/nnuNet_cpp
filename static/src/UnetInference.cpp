@@ -1,11 +1,12 @@
 #include "UnetInference.h"
-#include "DentalCbctSegAI_API.h"
 #include <iostream>
 #include <cmath>
+#include <limits>
 
 using namespace std;
 using namespace cimg_library;
 
+// 主推理函数 - 滑窗推理
 AI_INT UnetInference::runSlidingWindow(DentalUnet* parent,
                                       const nnUNetConfig& config,
                                       const CImg<float>& input,
@@ -14,13 +15,18 @@ AI_INT UnetInference::runSlidingWindow(DentalUnet* parent,
                                       Ort::SessionOptions& session_options,
                                       bool use_gpu)
 {
+    // TODO: 从DentalUnet::slidingWindowInfer迁移代码（行903-1237）
     return DentalCbctSegAI_STATUS_SUCCESS;
 }
 
-void UnetInference::createGaussianKernel(CImg<float>& kernel, const std::vector<int64_t>& patch_sizes)
+// 创建3D高斯核
+void UnetInference::createGaussianKernel(CImg<float>& gaussisan_weight, 
+                                        const std::vector<int64_t>& patch_sizes)
 {
+    // TODO: 从DentalUnet::create_3d_gaussian_kernel迁移代码（行1254-1306）
 }
 
+// 执行单个patch的推理
 AI_INT UnetInference::inferPatch(Ort::Session& session,
                                 const CImg<float>& patch,
                                 CImg<float>& output,
@@ -28,5 +34,6 @@ AI_INT UnetInference::inferPatch(Ort::Session& session,
                                 const char* input_name,
                                 const char* output_name)
 {
+    // TODO: 从slidingWindowInfer中提取单个patch推理逻辑
     return DentalCbctSegAI_STATUS_SUCCESS;
 }

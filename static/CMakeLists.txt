@@ -21,6 +21,10 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(SOURCES
     src/DentalCbctSegAI_API.cpp
     src/DentalUnet.cpp
+    src/UnetPreprocessor.cpp
+    src/UnetInference.cpp
+    src/UnetPostprocessor.cpp
+    src/UnetIO.cpp
     src/ConfigParser.cpp
     src/dllmain.cpp
     src/pch.cpp
@@ -29,6 +33,10 @@ set(SOURCES
 set(HEADERS
     header/DentalCbctSegAI_API.h
     header/DentalUnet.h
+    header/UnetPreprocessor.h
+    header/UnetInference.h
+    header/UnetPostprocessor.h
+    header/UnetIO.h
     header/ConfigParser.h
     header/framework.h
     header/pch.h

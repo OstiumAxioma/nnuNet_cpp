@@ -92,7 +92,6 @@ bool ConfigParser::parseJsonString(const std::string& jsonContent, ModelConfig& 
                 arrayContent.erase(std::remove_if(arrayContent.begin(), arrayContent.end(), ::isspace), arrayContent.end());
                 // 如果数组包含 "true"，则设置为 true
                 config.use_mask_for_norm = (arrayContent.find("true") != std::string::npos);
-                std::cout << "[DEBUG] Parsed use_mask_for_norm: " << (config.use_mask_for_norm ? "true" : "false") << std::endl;
             }
         }
         

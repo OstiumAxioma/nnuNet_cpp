@@ -74,6 +74,12 @@ struct CropBBox {
 
 class DentalUnet
 {
+	// 声明友元类以访问私有成员
+	friend class UnetPreprocessor;
+	friend class UnetInference;
+	friend class UnetPostprocessor;
+	friend class UnetIO;
+
 public:
 	DentalUnet();
 	~DentalUnet();

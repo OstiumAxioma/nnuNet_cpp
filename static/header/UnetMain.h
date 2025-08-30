@@ -1,5 +1,5 @@
-#ifndef _DentalUnet__H
-#define _DentalUnet__H
+#ifndef _UnetMain__H
+#define _UnetMain__H
 #pragma once
 
 #include <iostream>
@@ -13,7 +13,7 @@
 #define cimg_display_type 2
 #include "CImg.h"
 
-#include "DentalCbctSegAI_API.h"
+#include "UnetSegAI_API.h"
 #include "ConfigParser.h"
 
 // ITK headers for image I/O
@@ -72,7 +72,7 @@ struct CropBBox {
 	int x_min, x_max, y_min, y_max, z_min, z_max;
 };
 
-class DentalUnet
+class UnetMain
 {
 	// 声明友元类以访问私有成员
 	friend class UnetPreprocessor;
@@ -81,10 +81,10 @@ class DentalUnet
 	friend class UnetIO;
 
 public:
-	DentalUnet();
-	~DentalUnet();
+	UnetMain();
+	~UnetMain();
 
-	static DentalUnet *CreateDentalUnet();
+	static UnetMain *CreateUnetMain();
 
 	void    setModelFns(const wchar_t* model_fn);
 
@@ -203,4 +203,4 @@ private:
 	void    savePostprocessedData(const CImg<short>& data, const std::wstring& filename);
 	void    saveTile(const CImg<float>& tile, int tileIndex, int x, int y, int z);
 };
-#endif
+#endif //_UnetMain__H

@@ -3,16 +3,16 @@
 #pragma once
 
 #include <chrono>
-#include "DentalUnet.h"
+#include "UnetMain.h"
 #include "CImg.h"
 
-// Forward declaration for DentalUnet class only
-class DentalUnet;
+// Forward declaration for UnetMain class only
+class UnetMain;
 
 class UnetPostprocessor {
 public:
     // 主后处理函数
-    static AI_INT processSegmentationMask(DentalUnet* parent,
+    static AI_INT processSegmentationMask(UnetMain* parent,
                                          cimg_library::CImg<float>& prob_volume,
                                          AI_DataInfo* dstData);
     

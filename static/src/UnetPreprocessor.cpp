@@ -9,13 +9,13 @@ using namespace std;
 using namespace cimg_library;
 
 // 主预处理函数 - 暂时保留在DentalUnet.cpp中，后续迁移
-AI_INT UnetPreprocessor::preprocessVolume(DentalUnet* parent, 
+AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent, 
                                          nnUNetConfig& config, 
                                          CImg<short>& input_volume,
                                          CImg<float>& output_volume)
 {
     // TODO: 从DentalUnet::segModelInfer迁移预处理逻辑
-    return DentalCbctSegAI_STATUS_SUCCESS;
+    return UnetSegAI_STATUS_SUCCESS;
 }
 
 // 裁剪到非零区域 - 从DentalUnet.cpp行453-541迁移

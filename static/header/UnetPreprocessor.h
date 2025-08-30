@@ -4,16 +4,16 @@
 
 #include <vector>
 #include <chrono>
-#include "DentalUnet.h"
+#include "UnetMain.h"
 #include "CImg.h"
 
-// Forward declaration for DentalUnet class only
-class DentalUnet;
+// Forward declaration for UnetMain class only
+class UnetMain;
 
 class UnetPreprocessor {
 public:
     // 主预处理函数
-    static AI_INT preprocessVolume(DentalUnet* parent, 
+    static AI_INT preprocessVolume(UnetMain* parent, 
                                   nnUNetConfig& config, 
                                   cimg_library::CImg<short>& input_volume,
                                   cimg_library::CImg<float>& output_volume);

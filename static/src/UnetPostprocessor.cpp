@@ -1,5 +1,5 @@
 #include "UnetPostprocessor.h"
-#include "DentalCbctSegAI_API.h"
+#include "UnetSegAI_API.h"
 #include <iostream>
 #include <cstring>
 
@@ -7,12 +7,12 @@ using namespace std;
 using namespace cimg_library;
 
 // 主后处理函数
-AI_INT UnetPostprocessor::processSegmentationMask(DentalUnet* parent,
+AI_INT UnetPostprocessor::processSegmentationMask(UnetMain* parent,
                                                  CImg<float>& prob_volume,
                                                  AI_DataInfo* dstData)
 {
     // TODO: 从DentalUnet::getSegMask迁移代码（行1334-1440）
-    return DentalCbctSegAI_STATUS_SUCCESS;
+    return UnetSegAI_STATUS_SUCCESS;
 }
 
 // Argmax操作

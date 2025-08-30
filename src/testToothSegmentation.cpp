@@ -16,9 +16,9 @@
 
 
 // onnx 相关
-#include "..\\header\\DentalCbctSegAI_API.h"
+#include "..\\header\\UnetSegAI_API.h"
 #include "..\\lib\\onnxruntime\\include\\onnxruntime_cxx_api.h"
-#pragma comment(lib, "..\\\\lib\\\\DentalCbctOnnxSegDLL.lib")
+#pragma comment(lib, "..\\\\lib\\\\UnetOnnxSegDLL.lib")
 
 #pragma comment(lib,"..\\\\lib\\\\onnxruntime\\\\lib\\\\onnxruntime.lib")
 #pragma comment(lib,"..\\\\lib\\\\onnxruntime\\\\lib\\\\onnxruntime_providers_shared.lib")
@@ -217,7 +217,7 @@ int main()
 
         //===== 初始化分割模型 =====
         cout << "\n======= Initializing Model =======" << endl;
-        AI_HANDLE AI_Hdl = DentalCbctSegAI_CreateObj();
+        AI_HANDLE AI_Hdl = UnetSegAI_CreateObj();
         if (AI_Hdl == NULL) {
             cout << "Model initialization failed!" << endl;
             free(srcData);
@@ -225,33 +225,33 @@ int main()
         }
         
         // 配置模型参数
-        AI_INT config_status = DentalCbctSegAI_SetConfigFromJson(AI_Hdl, jsonContent.c_str());
-        if (config_status != DentalCbctSegAI_STATUS_SUCCESS) {
+        AI_INT config_status = UnetSegAI_SetConfigFromJson(AI_Hdl, jsonContent.c_str());
+        if (config_status != UnetSegAI_STATUS_SUCCESS) {
             cout << "Failed to set configuration!" << endl;
-            DentalCbctSegAI_ReleseObj(AI_Hdl);
+            UnetSegAI_ReleseObj(AI_Hdl);
             free(srcData);
             return -1;
         }
         
         // 设置模型路径
         wstring wModelPath(modelPath.begin(), modelPath.end());
-        AI_INT status1 = DentalCbctSegAI_SetModelPath(AI_Hdl, const_cast<wchar_t*>(wModelPath.c_str()));
-        if (status1 != DentalCbctSegAI_STATUS_SUCCESS) {
+        AI_INT status1 = UnetSegAI_SetModelPath(AI_Hdl, const_cast<wchar_t*>(wModelPath.c_str()));
+        if (status1 != UnetSegAI_STATUS_SUCCESS) {
             cout << "Failed to set model path!" << endl;
-            DentalCbctSegAI_ReleseObj(AI_Hdl);
+            UnetSegAI_ReleseObj(AI_Hdl);
             free(srcData);
             return -1;
         }
         
         // 设置TileStepRatio
-        DentalCbctSegAI_SetTileStepRatio(AI_Hdl, 0.5f);
+        UnetSegAI_SetTileStepRatio(AI_Hdl, 0.5f);
         
         // 设置中间结果输出路径
         wstring preprocessPath = L"..\\..\\..\\result\\preprocess";
         wstring modelOutputPath = L"..\\..\\..\\result\\model_output";
         wstring postprocessPath = L"..\\..\\..\\result\\postprocess";
         
-        DentalCbctSegAI_SetOutputPaths(AI_Hdl, 
+        UnetSegAI_SetOutputPaths(AI_Hdl, 
             const_cast<wchar_t*>(preprocessPath.c_str()),
             const_cast<wchar_t*>(modelOutputPath.c_str()),
             const_cast<wchar_t*>(postprocessPath.c_str()));
@@ -260,11 +260,11 @@ int main()
         cout << "\n======= Running Inference =======" << endl;
         auto start = chrono::steady_clock::now();
         
-        AI_INT AIWorkStatus = DentalCbctSegAI_Infer(AI_Hdl, srcData);
+        AI_INT AIWorkStatus = UnetSegAI_Infer(AI_Hdl, srcData);
         
-        if (AIWorkStatus != DentalCbctSegAI_STATUS_SUCCESS) {
+        if (AIWorkStatus != UnetSegAI_STATUS_SUCCESS) {
             cout << "Model inference failed! Status: " << AIWorkStatus << endl;
-            DentalCbctSegAI_ReleseObj(AI_Hdl);
+            UnetSegAI_ReleseObj(AI_Hdl);
             free(srcData);
             return -1;
         }
@@ -288,7 +288,7 @@ int main()
         toothSegData->ptr_Data = toothLabelMask.data();
         
         // 获取分割结果
-        DentalCbctSegAI_GetResult(AI_Hdl, toothSegData);
+        UnetSegAI_GetResult(AI_Hdl, toothSegData);
         
         // 使用ITK保存结果（NIfTI格式）
         string resultDir = "..\\\\..\\\\..\\\\result";
@@ -319,7 +319,7 @@ int main()
         cout << "Results saved to: " << resultPath << endl;
         
         // 清理资源
-        DentalCbctSegAI_ReleseObj(AI_Hdl);
+        UnetSegAI_ReleseObj(AI_Hdl);
         free(srcData);
         free(toothSegData);
         

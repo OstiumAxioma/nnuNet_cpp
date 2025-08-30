@@ -4,17 +4,17 @@
 
 #include <vector>
 #include <chrono>
-#include "DentalUnet.h"
+#include "UnetMain.h"
 #include "CImg.h"
 #include "onnxruntime_cxx_api.h"
 
-// Forward declaration for DentalUnet class only
-class DentalUnet;
+// Forward declaration for UnetMain class only
+class UnetMain;
 
 class UnetInference {
 public:
     // 主推理函数 - 滑窗推理
-    static AI_INT runSlidingWindow(DentalUnet* parent,
+    static AI_INT runSlidingWindow(UnetMain* parent,
                                   const nnUNetConfig& config,
                                   const cimg_library::CImg<float>& input,
                                   cimg_library::CImg<float>& output,

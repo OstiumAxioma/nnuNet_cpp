@@ -2,7 +2,7 @@
 chcp 65001
 
 echo ========================================
-echo DentalCbctOnnxSegDLL Build Script
+echo UnetOnnxSegDLL Build Script
 echo ========================================
 echo.
 
@@ -15,7 +15,7 @@ if exist CMakeCache.txt del CMakeCache.txt
 if exist CMakeFiles rmdir /s /q CMakeFiles
 
 :: 配置项目
-echo Configuring DLL project...
+echo Configuring UnetOnnxSegDLL project...
 cmake .. -G "Visual Studio 17 2022" -A x64 -DITK_DIR=D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4
 
 if %ERRORLEVEL% NEQ 0 (
@@ -62,28 +62,28 @@ if not exist "..\build\bin\Debug" mkdir "..\build\bin\Debug"
 echo Copying files from lib directory...
 
 :: 拷贝Release版本
-if exist "..\lib\DentalCbctOnnxSegDLL.dll" (
-    copy "..\lib\DentalCbctOnnxSegDLL.dll" "..\build\bin\Release\"
+if exist "..\lib\UnetOnnxSegDLL.dll" (
+    copy "..\lib\UnetOnnxSegDLL.dll" "..\build\bin\Release\"
     echo Release DLL copied to ..\build\bin\Release\
 ) else (
-    echo Warning: ..\lib\DentalCbctOnnxSegDLL.dll not found!
+    echo Warning: ..\lib\UnetOnnxSegDLL.dll not found!
 )
 
-if exist "..\lib\DentalCbctOnnxSegDLL.lib" (
-    copy "..\lib\DentalCbctOnnxSegDLL.lib" "..\build\bin\Release\"
+if exist "..\lib\UnetOnnxSegDLL.lib" (
+    copy "..\lib\UnetOnnxSegDLL.lib" "..\build\bin\Release\"
     echo Release LIB copied to ..\build\bin\Release\
 ) else (
-    echo Warning: ..\lib\DentalCbctOnnxSegDLL.lib not found!
+    echo Warning: ..\lib\UnetOnnxSegDLL.lib not found!
 )
 
 :: 拷贝Debug版本（如果存在）
-if exist "..\lib\DentalCbctOnnxSegDLL_d.dll" (
-    copy "..\lib\DentalCbctOnnxSegDLL_d.dll" "..\build\bin\Debug\"
+if exist "..\lib\UnetOnnxSegDLL_d.dll" (
+    copy "..\lib\UnetOnnxSegDLL_d.dll" "..\build\bin\Debug\"
     echo Debug DLL copied to ..\build\bin\Debug\
 )
 
-if exist "..\lib\DentalCbctOnnxSegDLL_d.lib" (
-    copy "..\lib\DentalCbctOnnxSegDLL_d.lib" "..\build\bin\Debug\"
+if exist "..\lib\UnetOnnxSegDLL_d.lib" (
+    copy "..\lib\UnetOnnxSegDLL_d.lib" "..\build\bin\Debug\"
     echo Debug LIB copied to ..\build\bin\Debug\
 )
 

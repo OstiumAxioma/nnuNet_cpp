@@ -33,12 +33,12 @@ find_library(ONNXRUNTIME_LIB onnxruntime PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/o
 find_library(ONNXRUNTIME_PROVIDERS_SHARED_LIB onnxruntime_providers_shared PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/onnxruntime/lib NO_DEFAULT_PATH)
 find_library(ONNXRUNTIME_PROVIDERS_CUDA_LIB onnxruntime_providers_cuda PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/onnxruntime/lib NO_DEFAULT_PATH)
 
-# DentalCbctOnnxSegDLL库
-find_library(DENTAL_CBCT_LIB DentalCbctOnnxSegDLL PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib NO_DEFAULT_PATH)
+# UnetOnnxSegDLL库
+find_library(UNET_SEG_LIB UnetOnnxSegDLL PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib NO_DEFAULT_PATH)
 
 # 链接库文件
 target_link_libraries(testToothSegmentation PRIVATE
-    ${DENTAL_CBCT_LIB}
+    ${UNET_SEG_LIB}
     ${ONNXRUNTIME_LIB}
     ${ONNXRUNTIME_PROVIDERS_SHARED_LIB}
     ${ONNXRUNTIME_PROVIDERS_CUDA_LIB}
@@ -116,10 +116,10 @@ if(WIN32)
     endforeach()
     message(STATUS "Found ${CMAKE_CURRENT_SOURCE_DIR}/lib/run directory with runtime DLLs")
     
-    # 复制DentalCbctOnnxSegDLL.dll
+    # 复制UnetOnnxSegDLL.dll
     add_custom_command(TARGET testToothSegmentation POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_CURRENT_SOURCE_DIR}/lib/DentalCbctOnnxSegDLL.dll
+            ${CMAKE_CURRENT_SOURCE_DIR}/lib/UnetOnnxSegDLL.dll
             $<TARGET_FILE_DIR:testToothSegmentation>
     )
 endif()

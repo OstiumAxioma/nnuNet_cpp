@@ -1,4 +1,5 @@
 #include "UnetInference.h"
+#include "UnetSegAI_API.h"
 #include <iostream>
 #include <cmath>
 #include <limits>
@@ -7,7 +8,7 @@ using namespace std;
 using namespace cimg_library;
 
 // 主推理函数 - 滑窗推理
-AI_INT UnetInference::runSlidingWindow(DentalUnet* parent,
+AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                                       const nnUNetConfig& config,
                                       const CImg<float>& input,
                                       CImg<float>& output,
@@ -15,8 +16,8 @@ AI_INT UnetInference::runSlidingWindow(DentalUnet* parent,
                                       Ort::SessionOptions& session_options,
                                       bool use_gpu)
 {
-    // TODO: 从DentalUnet::slidingWindowInfer迁移代码（行903-1237）
-    return DentalCbctSegAI_STATUS_SUCCESS;
+    // TODO: 从UnetMain::slidingWindowInfer迁移代码（行903-1237）
+    return UnetSegAI_STATUS_SUCCESS;
 }
 
 // 创建3D高斯核
@@ -35,5 +36,5 @@ AI_INT UnetInference::inferPatch(Ort::Session& session,
                                 const char* output_name)
 {
     // TODO: 从slidingWindowInfer中提取单个patch推理逻辑
-    return DentalCbctSegAI_STATUS_SUCCESS;
+    return UnetSegAI_STATUS_SUCCESS;
 }

@@ -6,7 +6,7 @@
 #include "CImg.h"
 
 // Forward declarations
-class DentalUnet;
+class UnetMain;
 
 struct ImageMetadata {
     double origin[3];

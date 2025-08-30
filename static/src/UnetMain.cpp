@@ -1,4 +1,4 @@
-#include "DentalUnet.h"
+#include "UnetMain.h"
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -9,7 +9,7 @@
 #include <tuple>
 #include <chrono>
 
-DentalUnet::DentalUnet()
+UnetMain::UnetMain()
 {
 	NETDEBUG_FLAG = true;
 
@@ -54,20 +54,20 @@ DentalUnet::DentalUnet()
 }
 
 
-DentalUnet::~DentalUnet()
+UnetMain::~UnetMain()
 {
 }
 
 
-DentalUnet *DentalUnet::CreateDentalUnet()
+UnetMain *UnetMain::CreateUnetMain()
 {
-	DentalUnet *segUnetModel = new DentalUnet();
+	UnetMain *segUnetModel = new UnetMain();
 
 
 	return segUnetModel;
 }
 
-void  DentalUnet::setModelFns(const wchar_t* model_fn)
+void  UnetMain::setModelFns(const wchar_t* model_fn)
 {
 	
 	if (model_fn == nullptr) {
@@ -80,7 +80,7 @@ void  DentalUnet::setModelFns(const wchar_t* model_fn)
 }
 
 
-void  DentalUnet::setStepSizeRatio(float ratio)
+void  UnetMain::setStepSizeRatio(float ratio)
 {
 	if (ratio <= 1.f && ratio >= 0.f)
 	{
@@ -93,39 +93,39 @@ void  DentalUnet::setStepSizeRatio(float ratio)
 }
 
 // 新增：参数设置接口实现
-void DentalUnet::setPatchSize(int64_t x, int64_t y, int64_t z)
+void UnetMain::setPatchSize(int64_t x, int64_t y, int64_t z)
 {
 	unetConfig.patch_size = { x, y, z };
 }
 
-void DentalUnet::setNumClasses(int classes)
+void UnetMain::setNumClasses(int classes)
 {
 	unetConfig.num_classes = classes;
 }
 
-void DentalUnet::setInputChannels(int channels)
+void UnetMain::setInputChannels(int channels)
 {
 	unetConfig.input_channels = channels;
 }
 
-void DentalUnet::setTargetSpacing(float x, float y, float z)
+void UnetMain::setTargetSpacing(float x, float y, float z)
 {
 	unetConfig.voxel_spacing = { x, y, z };
 }
 
-void DentalUnet::setTransposeSettings(int forward_x, int forward_y, int forward_z, 
+void UnetMain::setTransposeSettings(int forward_x, int forward_y, int forward_z, 
                                     int backward_x, int backward_y, int backward_z)
 {
 	unetConfig.transpose_forward = { forward_x, forward_y, forward_z };
 	unetConfig.transpose_backward = { backward_x, backward_y, backward_z };
 }
 
-void DentalUnet::setNormalizationType(const char* type)
+void UnetMain::setNormalizationType(const char* type)
 {
 	unetConfig.normalization_type = type;
 }
 
-void DentalUnet::setIntensityProperties(float mean, float std, float min_val, float max_val,
+void UnetMain::setIntensityProperties(float mean, float std, float min_val, float max_val,
                                       float percentile_00_5, float percentile_99_5)
 {
 	unetConfig.mean_std_HU = { mean, std };
@@ -136,13 +136,13 @@ void DentalUnet::setIntensityProperties(float mean, float std, float min_val, fl
 	unetConfig.std = static_cast<double>(std);
 }
 
-void DentalUnet::setUseMirroring(bool use_mirroring)
+void UnetMain::setUseMirroring(bool use_mirroring)
 {
 	unetConfig.use_mirroring = use_mirroring;
 }
 
 // 新增：JSON配置接口实现
-bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
+bool UnetMain::setConfigFromJsonString(const char* jsonContent)
 {
 	if (jsonContent == nullptr) {
 		return false;
@@ -211,19 +211,19 @@ bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
 }
 
 
-void  DentalUnet::setDnnOptions()
+void  UnetMain::setDnnOptions()
 {
 	//??????????????????????
 }
 
 
-void  DentalUnet::setAlgParameter()
+void  UnetMain::setAlgParameter()
 {
 	//????????????????
 }
 
 
-void DentalUnet::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath)
+void UnetMain::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath)
 {
 	if (preprocessPath != nullptr) {
 		preprocessOutputPath = preprocessPath;
@@ -248,7 +248,7 @@ void DentalUnet::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* mo
 }
 
 
-AI_INT  DentalUnet::initializeOnnxruntimeInstances()
+AI_INT  UnetMain::initializeOnnxruntimeInstances()
 {
 	
 	if (use_gpu) {
@@ -271,20 +271,20 @@ AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 	// 创建会话
 	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
 
-	return DentalCbctSegAI_STATUS_SUCCESS;
+	return UnetSegAI_STATUS_SUCCESS;
 }
 
 
-AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
+AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 {
 	
 	// 验证输入
 	if (srcData == nullptr) {
-		return DentalCbctSegAI_STATUS_FAIED;
+		return UnetSegAI_STATUS_FAIED;
 	}
 	
 	if (srcData->ptr_Data == nullptr) {
-		return DentalCbctSegAI_STATUS_FAIED;
+		return UnetSegAI_STATUS_FAIED;
 	}
 	
 	//check size of input volume
@@ -313,19 +313,19 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	float fovZ = float(Depth0) * voxelSpacingZ;
 
 	if (Height0 < 64 || Width0 < 64 || Depth0 < 64)
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //输入体积太小�
+		return UnetSegAI_STATUS_VOLUME_SMALL; //输入体积太小�
 
 	if (Height0 > 4096 || Width0 > 4096 || Depth0 > 2048)
-		return DentalCbctSegAI_STATUS_VOLUME_LARGE; //输入体积太大
+		return UnetSegAI_STATUS_VOLUME_LARGE; //输入体积太大
 
 	if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volume太小�
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL;
+		return UnetSegAI_STATUS_VOLUME_SMALL;
 
 	if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacing太小�
-		return DentalCbctSegAI_STATUS_VOLUME_LARGE;
+		return UnetSegAI_STATUS_VOLUME_LARGE;
 
 	if (voxelSpacing > 1.1f || voxelSpacingX > 1.1f || voxelSpacingY > 1.1f || voxelSpacingZ > 1.1f)
-		return DentalCbctSegAI_STATUS_VOLUME_SMALL; //voxelSpacing太大
+		return UnetSegAI_STATUS_VOLUME_SMALL; //voxelSpacing太大
 
 	// 创建CImg对象并复制数据
 	//RAI: 右-前-上坐标系，与医学图像标准一致
@@ -351,7 +351,7 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	std::cout << "  Dimensions: " << Width0 << " x " << Height0 << " x " << Depth0 << endl;
 	std::cout << "  Spacing: " << input_voxel_spacing[0] << " x " << input_voxel_spacing[1] << " x " << input_voxel_spacing[2] << " mm" << endl;
 
-	return DentalCbctSegAI_STATUS_SUCCESS;
+	return UnetSegAI_STATUS_SUCCESS;
 }
 
 // 简单的3D binary_fill_holes实现（匹配scipy.ndimage.binary_fill_holes）
@@ -450,7 +450,7 @@ void binary_fill_holes_3d(CImg<bool>& mask) {
 }
 
 // 实现crop_to_nonzero函数，与Python版本对齐
-CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox) {
+CImg<short> UnetMain::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox) {
 	// 找到非零区域的边界
 	bbox.x_min = input.width();
 	bbox.x_max = -1;
@@ -539,10 +539,10 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 	return cropped;
 }
 
-AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
+AI_INT  UnetMain::performInference(AI_DataInfo *srcData)
 {
 	int input_status = setInput(srcData);
-	if (input_status != DentalCbctSegAI_STATUS_SUCCESS)
+	if (input_status != UnetSegAI_STATUS_SUCCESS)
 		return input_status;
 
 	// 按照Python版本的顺序进行预处理：
@@ -600,7 +600,7 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 }
 
 
-AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
+AI_INT  UnetMain::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 {
 	std::cout << "\n======= Preprocessing Stage =======" << endl;
 	auto preprocess_start = std::chrono::steady_clock::now();
@@ -869,13 +869,13 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	auto inference_start = std::chrono::steady_clock::now();
 	try {
 		AI_INT is_ok = slidingWindowInfer(config, scaled_input_volume);
-		if (is_ok != DentalCbctSegAI_STATUS_SUCCESS) {
+		if (is_ok != UnetSegAI_STATUS_SUCCESS) {
 			return is_ok;
 		}
 	} catch (const std::exception& e) {
-		return DentalCbctSegAI_STATUS_FAIED;
+		return UnetSegAI_STATUS_FAIED;
 	} catch (...) {
-		return DentalCbctSegAI_STATUS_FAIED;
+		return UnetSegAI_STATUS_FAIED;
 	}
 
 	auto inference_end = std::chrono::steady_clock::now();
@@ -896,11 +896,11 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	// 不在这里执行argmax，保持概率图供后续处理
 	// argmax将在getSegMask中的后处理流程中执行
 
-	return DentalCbctSegAI_STATUS_SUCCESS;
+	return UnetSegAI_STATUS_SUCCESS;
 }
 
 
-AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume)
+AI_INT  UnetMain::slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume)
 {
 	if (use_gpu) {
 		try {
@@ -918,7 +918,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	
 	// 检查模型文件名
 	if (config.model_file_name == nullptr) {
-		return DentalCbctSegAI_LOADING_FAIED;
+		return UnetSegAI_LOADING_FAIED;
 	}
 	
 	//try-catch处理ONNX Runtime异常
@@ -1098,10 +1098,10 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				try {
 					input_patch = padded_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
 					if (input_patch.width() != config.patch_size[2] || input_patch.height() != config.patch_size[1] || input_patch.depth() != config.patch_size[0]) {
-						return DentalCbctSegAI_STATUS_FAIED;
+						return UnetSegAI_STATUS_FAIED;
 					}
 				} catch (const CImgException& e) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				}
 
 				//std::vector<float> input_tensor_data;
@@ -1123,7 +1123,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				
 				// 验证输入 tensor
 				if (input_data_ptr == nullptr) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				}
 
 				// 在try块外声明输出张量
@@ -1152,23 +1152,23 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					*/
 
 				} catch (const Ort::Exception& e) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				} catch (const std::exception& e) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				} catch (...) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				}
 
 				// 处理输出张量
 				
 				if (output_tensors.empty()) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				}
 				
 				float* output_data = output_tensors[0].GetTensorMutableData<float>();
 				
 				if (output_data == nullptr) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				}
 
 				// 复制到CImg
@@ -1190,7 +1190,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						
 						// 写入前验证边界（使用padded dimensions）
 						if (gx < 0 || gx >= working_width || gy < 0 || gy >= working_height || gz < 0 || gz >= working_depth) {
-							return DentalCbctSegAI_STATUS_FAIED;
+							return UnetSegAI_STATUS_FAIED;
 						}
 						
 						padded_output_prob(gx, gy, gz, c) += (win_pob(x, y, z, c) * gaussisan_weight(x, y, z));
@@ -1199,7 +1199,7 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						count_vol(lb_x + x, lb_y + y, lb_z + z) += gaussisan_weight(x, y, z);
 					}
 				} catch (const std::exception& e) {
-					return DentalCbctSegAI_STATUS_FAIED;
+					return UnetSegAI_STATUS_FAIED;
 				}
 				
 				std::cout << "Tile #" << patch_count << " completed" << endl;
@@ -1226,16 +1226,16 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	
 	std::cout << "Sliding window inference is done." << endl;
 
-	return DentalCbctSegAI_STATUS_SUCCESS;
+	return UnetSegAI_STATUS_SUCCESS;
 	} catch (const Ort::Exception& e) {
-		return DentalCbctSegAI_LOADING_FAIED;
+		return UnetSegAI_LOADING_FAIED;
 	} catch (const std::exception& e) {
-		return DentalCbctSegAI_STATUS_FAIED;
+		return UnetSegAI_STATUS_FAIED;
 	}
 }
 
 
-void DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
+void UnetMain::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 {
 	//使用percentile值进行裁剪（与Python版本一致）
 	double lower_bound = config.percentile_00_5;
@@ -1251,7 +1251,7 @@ void DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 }
 
 
-void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes)
+void UnetMain::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes)
 {
 	// 匹配Python版本：sigma_scale = 1/8
 	float sigma_scale = 1.0f / 8.0f;
@@ -1304,7 +1304,7 @@ void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const 
 }
 
 
-CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
+CImg<short> UnetMain::argmax_spectrum(const CImg<float>& input) {
 	if (input.is_empty() || input.spectrum() == 0) {
 		throw std::invalid_argument("Input must be a non-empty 4D CImg with spectrum dimension.");
 	}
@@ -1331,7 +1331,7 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 }
 
 
-AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
+AI_INT  UnetMain::getSegMask(AI_DataInfo *dstData)
 {
 	std::cout << "\n======= Post-processing Stage =======" << endl;
 	auto postprocess_start = std::chrono::steady_clock::now();
@@ -1434,11 +1434,11 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 	std::cout << "Post-processing completed in " << postprocess_elapsed.count() << " seconds" << endl;
 	std::cout << "======= Post-processing Complete =======" << endl;
 	
-	return DentalCbctSegAI_STATUS_SUCCESS;
+	return UnetSegAI_STATUS_SUCCESS;
 }
 
 
-void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstring& filename)
+void UnetMain::savePreprocessedData(const CImg<float>& data, const std::wstring& filename)
 {
 	if (!saveIntermediateResults || preprocessOutputPath.empty()) return;
 	
@@ -1522,7 +1522,7 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 }
 
 
-void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& filename)
+void UnetMain::saveModelOutput(const CImg<float>& data, const std::wstring& filename)
 {
 	if (!saveIntermediateResults || modelOutputPath.empty()) return;
 	
@@ -1615,7 +1615,7 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 }
 
 
-void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstring& filename)
+void UnetMain::savePostprocessedData(const CImg<short>& data, const std::wstring& filename)
 {
 	if (!saveIntermediateResults || postprocessOutputPath.empty()) return;
 	
@@ -1699,7 +1699,7 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 }
 
 
-void DentalUnet::saveTile(const CImg<float>& tile, int tileIndex, int x, int y, int z)
+void UnetMain::saveTile(const CImg<float>& tile, int tileIndex, int x, int y, int z)
 {
 	if (!saveIntermediateResults || modelOutputPath.empty()) return;
 	

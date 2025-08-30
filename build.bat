@@ -65,10 +65,10 @@ if %ERRORLEVEL% NEQ 0 (
 )
 echo Runtime libraries copied successfully!
 
-:: 确保DentalCbctOnnxSegDLL.dll也被复制
-if exist lib\DentalCbctOnnxSegDLL.dll (
-    copy /Y lib\DentalCbctOnnxSegDLL.dll build\bin\Release\
-    echo DentalCbctOnnxSegDLL.dll copied successfully!
+:: 确保UnetOnnxSegDLL.dll也被复制
+if exist lib\UnetOnnxSegDLL.dll (
+    copy /Y lib\UnetOnnxSegDLL.dll build\bin\Release\
+    echo UnetOnnxSegDLL.dll copied successfully!
 )
 
 echo.

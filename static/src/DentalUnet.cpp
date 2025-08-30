@@ -7,6 +7,7 @@
 #include <limits>
 #include <queue>
 #include <tuple>
+#include <chrono>
 
 DentalUnet::DentalUnet()
 {
@@ -17,7 +18,6 @@ DentalUnet::DentalUnet()
 	use_gpu = true;
 
 	for (const auto& provider : providers) {
-		std::cout << "可用Provider: " << provider << std::endl;
 		if (provider == "CUDAExecutionProvider") {
 			use_gpu = true;
 		}
@@ -63,22 +63,18 @@ DentalUnet *DentalUnet::CreateDentalUnet()
 {
 	DentalUnet *segUnetModel = new DentalUnet();
 
-	std::cout << "CreateDentalUnet is done. "<<endl;
 
 	return segUnetModel;
 }
 
 void  DentalUnet::setModelFns(const wchar_t* model_fn)
 {
-	std::cout << "[DEBUG] DentalUnet::setModelFns() called" << endl;
 	
 	if (model_fn == nullptr) {
-		std::cerr << "[ERROR] Model filename is NULL!" << endl;
 		return;
 	}
 	
 	// 打印模型路径用于调试
-	std::wcout << L"[DEBUG] Model path: " << model_fn << endl;
 	
 	unetConfig.model_file_name = model_fn;
 }
@@ -207,13 +203,6 @@ bool DentalUnet::setConfigFromJsonString(const char* jsonContent)
 		unetConfig.use_mask_for_norm = config.use_mask_for_norm;
 		
 		// 调试输出确认配置
-		std::cout << "[DEBUG] Configuration loaded from JSON:" << endl;
-		std::cout << "  - num_classes: " << unetConfig.num_classes << endl;
-		std::cout << "  - patch_size: [" << unetConfig.patch_size[0] << ", " 
-		          << unetConfig.patch_size[1] << ", " << unetConfig.patch_size[2] << "]" << endl;
-		std::cout << "  - normalization_type: " << unetConfig.normalization_type << endl;
-		std::cout << "  - use_mask_for_norm: " << (unetConfig.use_mask_for_norm ? "true" : "false") << endl;
-		std::cout << "  - mean: " << unetConfig.mean << ", std: " << unetConfig.std << endl;
 		
 		return true;
 	}
@@ -261,30 +250,23 @@ void DentalUnet::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* mo
 
 AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 {
-	std::cout << "[DEBUG] Initializing ONNX Runtime instances..." << endl;
 	
 	if (use_gpu) {
-		std::cout << "[DEBUG] GPU mode enabled, configuring CUDA provider..." << endl;
 		try {
 			//OrtCUDAProviderOptions cuda_options;
 			//cuda_options.device_id = 0;  // 设置 GPU 设备 ID
 			//session_options.AppendExecutionProvider_CUDA(cuda_options);
 
 			Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
-			std::cout << "[DEBUG] CUDA provider added successfully" << endl;
 		} catch (const Ort::Exception& e) {
-			std::cerr << "[WARNING] Failed to add CUDA provider: " << e.what() << endl;
-			std::cerr << "[WARNING] Falling back to CPU" << endl;
 			use_gpu = false;
 		}
 	} else {
-		std::cout << "[DEBUG] Using CPU mode" << endl;
 	}
 	
 	// 设置线程数
 	session_options.SetIntraOpNumThreads(1);
 	session_options.SetInterOpNumThreads(1);
-	std::cout << "[DEBUG] Thread settings: IntraOp=1, InterOp=1" << endl;
 
 	// 创建会话
 	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
@@ -295,16 +277,13 @@ AI_INT  DentalUnet::initializeOnnxruntimeInstances()
 
 AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 {
-	std::cout << "[DEBUG] DentalUnet::setInput() called" << endl;
 	
 	// 验证输入
 	if (srcData == nullptr) {
-		std::cerr << "[ERROR] srcData is NULL!" << endl;
 		return DentalCbctSegAI_STATUS_FAIED;
 	}
 	
 	if (srcData->ptr_Data == nullptr) {
-		std::cerr << "[ERROR] srcData->ptr_Data is NULL!" << endl;
 		return DentalCbctSegAI_STATUS_FAIED;
 	}
 	
@@ -317,8 +296,6 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	float voxelSpacingY = srcData->VoxelSpacingY; //单位: mm
 	float voxelSpacingZ = srcData->VoxelSpacingZ; //单位: mm
 	
-	std::cout << "[DEBUG] Input volume dimensions: " << Width0 << "x" << Height0 << "x" << Depth0 << endl;
-	std::cout << "[DEBUG] Voxel spacing: X=" << voxelSpacingX << ", Y=" << voxelSpacingY << ", Z=" << voxelSpacingZ << endl;
 	
 	// 保存origin信息到元数据
 	imageMetadata.origin[0] = srcData->OriginX;
@@ -330,9 +307,6 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	imageMetadata.spacing[1] = voxelSpacingY;
 	imageMetadata.spacing[2] = voxelSpacingZ;
 	
-	std::cout << "[DEBUG] Origin: X=" << imageMetadata.origin[0] 
-	         << ", Y=" << imageMetadata.origin[1] 
-	         << ", Z=" << imageMetadata.origin[2] << endl;
 
 	float fovX = float(Width0) * voxelSpacingY;
 	float fovY = float(Height0) * voxelSpacingX;
@@ -367,17 +341,15 @@ AI_INT  DentalUnet::setInput(AI_DataInfo *srcData)
 	// 读取原始spacing（如果提供了的话）
 	if (srcData->OriginalVoxelSpacingX > 0 && srcData->OriginalVoxelSpacingY > 0 && srcData->OriginalVoxelSpacingZ > 0) {
 		original_voxel_spacing = { srcData->OriginalVoxelSpacingX, srcData->OriginalVoxelSpacingY, srcData->OriginalVoxelSpacingZ };
-		std::cout << "[DEBUG] Original voxel spacing: X=" << srcData->OriginalVoxelSpacingX 
-		          << ", Y=" << srcData->OriginalVoxelSpacingY 
-		          << ", Z=" << srcData->OriginalVoxelSpacingZ << endl;
 	} else {
 		// 如果没有提供原始spacing，则使用当前spacing作为原始spacing
 		original_voxel_spacing = input_voxel_spacing;
-		std::cout << "[DEBUG] No original spacing provided, using current spacing as original" << endl;
 	}
 
 	// 统计信息将在预处理流水线中计算
 	std::cout << "Input volume loaded successfully" << endl;
+	std::cout << "  Dimensions: " << Width0 << " x " << Height0 << " x " << Depth0 << endl;
+	std::cout << "  Spacing: " << input_voxel_spacing[0] << " x " << input_voxel_spacing[1] << " x " << input_voxel_spacing[2] << " mm" << endl;
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
@@ -475,7 +447,6 @@ void binary_fill_holes_3d(CImg<bool>& mask) {
 		}
 	}
 	
-	std::cout << "[DEBUG] binary_fill_holes filled " << filled_count << " pixels" << endl;
 }
 
 // 实现crop_to_nonzero函数，与Python版本对齐
@@ -501,7 +472,6 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 	// 应用binary_fill_holes（与Python的scipy.ndimage.binary_fill_holes一致）
 	// 暂时禁用以测试是否是fill hole导致的差异
 	// binary_fill_holes_3d(nonzero_mask);
-	std::cout << "[DEBUG] binary_fill_holes DISABLED for testing" << endl;
 	
 	// 重新计算bbox（基于填充后的mask）
 	cimg_forXYZ(input, x, y, z) {
@@ -517,12 +487,9 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 	
 	// 如果没有找到非零像素，返回原图像
 	if (bbox.x_max == -1) {
-		std::cout << "[WARNING] No non-zero pixels found, using full volume" << endl;
 		bbox.x_min = 0; bbox.x_max = input.width() - 1;
 		bbox.y_min = 0; bbox.y_max = input.height() - 1;
 		bbox.z_min = 0; bbox.z_max = input.depth() - 1;
-		std::cout << "[WARNING] Full volume bbox set to: X[0:" << bbox.x_max 
-		          << "], Y[0:" << bbox.y_max << "], Z[0:" << bbox.z_max << "]" << endl;
 		
 		// 创建全为0的seg_mask（因为全是背景）
 		seg_mask = CImg<short>(input.width(), input.height(), input.depth(), 1, -1);
@@ -531,10 +498,6 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 	
 	// 验证bbox是否合理
 	if (bbox.x_min > bbox.x_max || bbox.y_min > bbox.y_max || bbox.z_min > bbox.z_max) {
-		std::cout << "[ERROR] Invalid bbox detected after computation!" << endl;
-		std::cout << "[ERROR] Bbox values: X[" << bbox.x_min << ":" << bbox.x_max 
-		          << "], Y[" << bbox.y_min << ":" << bbox.y_max 
-		          << "], Z[" << bbox.z_min << ":" << bbox.z_max << "]" << endl;
 		// 重置为全图像
 		bbox.x_min = 0; bbox.x_max = input.width() - 1;
 		bbox.y_min = 0; bbox.y_max = input.height() - 1;
@@ -548,9 +511,6 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 		return input;
 	}
 	
-	std::cout << "[DEBUG] Crop bbox: X[" << bbox.x_min << ":" << bbox.x_max 
-	          << "], Y[" << bbox.y_min << ":" << bbox.y_max 
-	          << "], Z[" << bbox.z_min << ":" << bbox.z_max << "]" << endl;
 	          
 	// 执行裁剪
 	CImg<short> cropped = input.get_crop(bbox.x_min, bbox.y_min, bbox.z_min, 
@@ -574,11 +534,7 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 		if (seg_mask(x, y, z) == 0) seg_zero_count++;
 		else if (seg_mask(x, y, z) == -1) seg_neg_count++;
 	}
-	std::cout << "[DEBUG] seg_mask created: " << seg_zero_count << " pixels with value 0 (nonzero region), " 
-	          << seg_neg_count << " pixels with value -1 (background)" << endl;
 	                                     
-	std::cout << "[DEBUG] Shape after cropping: " << cropped.width() << "x" 
-	          << cropped.height() << "x" << cropped.depth() << endl;
 	          
 	return cropped;
 }
@@ -586,13 +542,11 @@ CImg<short> DentalUnet::crop_to_nonzero(const CImg<short>& input, CropBBox& bbox
 AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 {
 	int input_status = setInput(srcData);
-	std::cout << "input_status: " << input_status << endl;
 	if (input_status != DentalCbctSegAI_STATUS_SUCCESS)
 		return input_status;
 
 	// 按照Python版本的顺序进行预处理：
 	// 1. 转置
-	std::cout << "[DEBUG] Step 1: Transpose" << endl;
 	input_cbct_volume.permute_axes(unetConfig.cimg_transpose_forward);
 	transposed_input_voxel_spacing.clear();
 	transposed_original_voxel_spacing.clear();
@@ -602,23 +556,16 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 	}
 	
 	// 2. 裁剪到非零区域
-	std::cout << "[DEBUG] Step 2: Crop to non-zero region" << endl;
-	std::cout << "[DEBUG] Shape before cropping: " << input_cbct_volume.width() 
-	          << "x" << input_cbct_volume.height() << "x" << input_cbct_volume.depth() << endl;
 	CImg<short> cropped_volume = crop_to_nonzero(input_cbct_volume, crop_bbox);
 	
 	// 3. 在裁剪后的数据上计算或使用配置的归一化参数
-	std::cout << "[DEBUG] Step 3: Determine intensity statistics strategy" << endl;
-	std::cout << "[DEBUG] Normalization type: " << unetConfig.normalization_type << endl;
 	
 	// 根据归一化类型决定是否使用JSON配置的值
 	if (unetConfig.normalization_type == "ZScoreNormalization") {
 		// ZScoreNormalization总是动态计算mean和std（MRI等模态）
-		std::cout << "[DEBUG] ZScoreNormalization detected - will dynamically calculate mean/std" << endl;
 		
 		if (unetConfig.use_mask_for_norm) {
 			// 在mask区域动态计算
-			std::cout << "[DEBUG] Will calculate on mask region in normalization step" << endl;
 			// 这里暂不计算，将在segModelInfer的归一化步骤中动态计算
 			intensity_mean = 0.0;  // 占位值
 			intensity_std = 1.0;   // 占位值
@@ -628,33 +575,23 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 			double var = cropped_volume.variance();  // CImg::variance()返回double
 			intensity_std = std::sqrt(var);
 			if (intensity_std < 1e-8) intensity_std = 1e-8;  // 匹配Python的max(std, 1e-8)
-			std::cout << "[DEBUG] Dynamically calculated global stats: mean=" 
-			          << intensity_mean << ", std=" << intensity_std << endl;
 		}
 	} else if (unetConfig.normalization_type == "CTNormalization" || 
 	           unetConfig.normalization_type == "CT" || 
 	           unetConfig.normalization_type == "ct") {
 		// CTNormalization使用JSON配置的值（CT等标准化模态）
-		std::cout << "[DEBUG] CTNormalization detected - using JSON intensity_properties" << endl;
 		intensity_mean = unetConfig.mean;
 		intensity_std = unetConfig.std;
-		std::cout << "[DEBUG] Using configured intensity properties: mean=" 
-		          << intensity_mean << ", std=" << intensity_std << endl;
 	} else {
 		// 默认行为：动态计算
-		std::cout << "[DEBUG] Unknown normalization type, using dynamic calculation" << endl;
 		intensity_mean = cropped_volume.mean();  // CImg::mean()返回double
 		double var = cropped_volume.variance();  // CImg::variance()返回double
 		intensity_std = std::sqrt(var);
 		if (intensity_std < 1e-8) intensity_std = 1e-8;
-		std::cout << "[DEBUG] Dynamically calculated stats: mean=" 
-		          << intensity_mean << ", std=" << intensity_std << endl;
 	}
 
 	// 4. 调用推理（包含归一化和重采样）
-	std::cout << "[DEBUG] Step 4: Model inference (normalize -> resample -> infer)" << endl;
 	int infer_status = segModelInfer(unetConfig, cropped_volume);
-	std::cout << "infer_status: " << infer_status << endl;
 
 	// 不在这里恢复转置，将在getSegMask的最后步骤中处理
 	// 保持数据在转置后的坐标系中，以便正确处理裁剪恢复
@@ -665,6 +602,8 @@ AI_INT  DentalUnet::performInference(AI_DataInfo *srcData)
 
 AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 {
+	std::cout << "\n======= Preprocessing Stage =======" << endl;
+	auto preprocess_start = std::chrono::steady_clock::now();
 
 	if (transposed_input_voxel_spacing.size() != config.voxel_spacing.size()) {
 		throw std::runtime_error("Spacing dimensions mismatch");
@@ -677,16 +616,6 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::vector<int64_t> output_size;
 	float scaled_factor = 1.f;
 	
-	std::cout << "[DEBUG] Scaling calculation:" << endl;
-	std::cout << "  Current spacing: [" << transposed_input_voxel_spacing[0] 
-	          << ", " << transposed_input_voxel_spacing[1] 
-	          << ", " << transposed_input_voxel_spacing[2] << "]" << endl;
-	std::cout << "  Original spacing: [" << transposed_original_voxel_spacing[0] 
-	          << ", " << transposed_original_voxel_spacing[1] 
-	          << ", " << transposed_original_voxel_spacing[2] << "]" << endl;
-	std::cout << "  Target spacing: [" << config.voxel_spacing[0] 
-	          << ", " << config.voxel_spacing[1] 
-	          << ", " << config.voxel_spacing[2] << "]" << endl;
 	
 	for (int i = 0; i < 3; ++i) {  // 遍历三个维度
 		// 使用原始spacing计算缩放因子，与Python保持一致
@@ -703,25 +632,12 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		output_size.push_back(static_cast<int64_t>(scaled_sz));
 		
 		// 输出每个轴的缩放信息
-		std::cout << "  Axis " << i << ":" << endl;
-		std::cout << "    original_spacing: " << transposed_original_voxel_spacing[i] << endl;
-		std::cout << "    current_spacing: " << transposed_input_voxel_spacing[i] << endl;
-		std::cout << "    target_spacing: " << config.voxel_spacing[i] << endl;
-		std::cout << "    scaled_factor: " << scaled_factor << " (" << transposed_original_voxel_spacing[i] 
-		          << " / " << config.voxel_spacing[i] << ")" << endl;
-		std::cout << "    size: " << input_size[i] << " -> " << scaled_sz << endl;
 	}
 
-	std::cout << "[DEBUG] Original size: " << input_size[0] << "x" << input_size[1] << "x" << input_size[2] << endl;
-	std::cout << "[DEBUG] Scaled size: " << output_size[0] << "x" << output_size[1] << "x" << output_size[2] << endl;
-	std::cout << "[DEBUG] Scale factors: " << transposed_original_voxel_spacing[0]/config.voxel_spacing[0] 
-	          << ", " << transposed_original_voxel_spacing[1]/config.voxel_spacing[1] 
-	          << ", " << transposed_original_voxel_spacing[2]/config.voxel_spacing[2] << endl;
 
 	// 按照Python版本的顺序：先归一化，后重采样
 	
 	// Step 1: 归一化（在原始分辨率上进行）
-	std::cout << "[DEBUG] Step 1: Normalization (before resampling)" << endl;
 	CImg<float> normalized_volume;
 	normalized_volume.assign(input_volume);  // 转换为float
 	
@@ -731,17 +647,8 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	}
 	
 	// 输出归一化前的统计信息
-	std::cout << "[DEBUG] === BEFORE NORMALIZATION ===" << endl;
-	std::cout << "[DEBUG] Data shape: " << normalized_volume.width() << "x" 
-	          << normalized_volume.height() << "x" << normalized_volume.depth() << endl;
-	std::cout << "[DEBUG] Data min: " << normalized_volume.min() << endl;
-	std::cout << "[DEBUG] Data max: " << normalized_volume.max() << endl;
-	std::cout << "[DEBUG] Data mean: " << normalized_volume.mean() << endl;
-	std::cout << "[DEBUG] Data std: " << std::sqrt(normalized_volume.variance()) << endl;
 	
 	// 输出seg_mask的维度以确认它与normalized_volume匹配
-	std::cout << "[DEBUG] seg_mask shape: " << seg_mask.width() << "x" 
-	          << seg_mask.height() << "x" << seg_mask.depth() << endl;
 	
 	// 统计seg_mask的值分布
 	int seg_positive = 0, seg_negative = 0, seg_zero = 0;
@@ -750,8 +657,6 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		else if (seg_mask(x, y, z) < 0) seg_negative++;
 		else seg_zero++;
 	}
-	std::cout << "[DEBUG] seg_mask value distribution: positive=" << seg_positive 
-	          << ", zero=" << seg_zero << ", negative=" << seg_negative << endl;
 	
 	// 计算非零区域的统计（用于对比）
 	// 使用seg_mask判断前景区域，与Python一致
@@ -774,8 +679,6 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 			}
 		}
 		double nonzero_std = std::sqrt(nonzero_var / nonzero_count);
-		std::cout << "[DEBUG] Non-zero region stats (using seg_mask>=0): mean=" << nonzero_mean 
-		          << ", std=" << nonzero_std << ", pixels=" << nonzero_count << endl;
 		
 		// 也计算使用简单>0判断的统计作为对比
 		int simple_count = 0;
@@ -796,32 +699,24 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 				}
 			}
 			double simple_std = std::sqrt(simple_var / simple_count);
-			std::cout << "[DEBUG] Non-zero region stats (using value>0): mean=" << simple_mean 
-			          << ", std=" << simple_std << ", pixels=" << simple_count << endl;
 		}
 	}
 	
 	// 输出特定位置的值（用于精确对比）
 	if (normalized_volume.depth() > 2 && normalized_volume.height() > 162 && normalized_volume.width() > 44) {
-		std::cout << "[DEBUG] Value at (44,162,2) before norm: " << normalized_volume(44, 162, 2) << endl;
-		std::cout << "[DEBUG] seg_mask at (44,162,2): " << seg_mask(44, 162, 2) << endl;
 	}
 	
 	// 输出一些采样点的值用于对比
-	std::cout << "[DEBUG] Sample points before normalization:" << endl;
 	for (int i = 0; i < 5 && i < normalized_volume.depth(); i++) {
 		for (int j = 0; j < 5 && j < normalized_volume.height(); j++) {
 			for (int k = 0; k < 5 && k < normalized_volume.width(); k++) {
 				if (normalized_volume(k, j, i) != 0) {
-					std::cout << "  (" << k << "," << j << "," << i << "): value=" 
-					          << normalized_volume(k, j, i) << ", seg=" << seg_mask(k, j, i) << endl;
 					break;
 				}
 			}
 		}
 	}
 	
-	std::cout << "[DEBUG] ================================" << endl;
 	
 	// 执行归一化
 	std::map<std::string, int> normalizationOptionsMap = {
@@ -843,13 +738,10 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 
 	switch (normlization_type) {
 	case 10:
-		std::cout << "[DEBUG] Using CT Normalization" << endl;
 		CTNormalization(normalized_volume, config);
 		break;
 	case 20:
-		std::cout << "[DEBUG] Using Z-Score Normalization" << endl;
 		if (config.use_mask_for_norm) {
-			std::cout << "[DEBUG] Using mask-based normalization (dynamic calculation)" << endl;
 			// 使用seg_mask创建mask（与Python一致：seg >= 0表示非零区域）
 			// Python: mask = seg[0] >= 0
 			CImg<bool> mask(normalized_volume.width(), normalized_volume.height(), normalized_volume.depth());
@@ -885,8 +777,6 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 				mask_std = std::sqrt(mask_std / mask_count);
 				if (mask_std < 1e-8) mask_std = 1e-8;  // 匹配Python的max(std, 1e-8)
 				
-				std::cout << "[DEBUG] Dynamically calculated mask-based stats: mean=" << mask_mean 
-				          << ", std=" << mask_std << ", mask_pixels=" << mask_count << endl;
 				
 				// 验证seg_mask的统计信息
 				int seg_positive = 0, seg_negative = 0;
@@ -894,8 +784,6 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 					if (seg_mask(x, y, z) >= 0) seg_positive++;
 					else seg_negative++;
 				}
-				std::cout << "[DEBUG] seg_mask stats: " << seg_positive << " pixels >= 0, " 
-				          << seg_negative << " pixels < 0" << endl;
 				
 				// 只对mask区域进行归一化，背景设为0
 				cimg_forXYZ(normalized_volume, x, y, z) {
@@ -905,34 +793,21 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 						normalized_volume(x, y, z) = 0.0f;
 					}
 				}
-				std::cout << "[DEBUG] Normalized " << mask_count << " non-zero pixels, set " 
-				          << (normalized_volume.size() - mask_count) << " background pixels to 0" << endl;
 			} else {
-				std::cout << "[WARNING] No non-zero pixels found for mask normalization" << endl;
 			}
 		} else {
 			// 传统的全局归一化
-			std::cout << "[DEBUG] Using global normalization" << endl;
-			std::cout << "[DEBUG] intensity_mean: " << intensity_mean << ", intensity_std: " << intensity_std << endl;
 			normalized_volume -= intensity_mean;
 			normalized_volume /= intensity_std;
 		}
 		break;
 	default:
-		std::cout << "[DEBUG] Using default Z-Score Normalization" << endl;
 		normalized_volume -= intensity_mean;
 		normalized_volume /= intensity_std;
 		break;
 	}
 	
 	// 输出归一化后的详细统计信息
-	std::cout << "[DEBUG] === AFTER NORMALIZATION ===" << endl;
-	std::cout << "[DEBUG] Data shape: " << normalized_volume.width() << "x" 
-	          << normalized_volume.height() << "x" << normalized_volume.depth() << endl;
-	std::cout << "[DEBUG] Data min: " << normalized_volume.min() << endl;
-	std::cout << "[DEBUG] Data max: " << normalized_volume.max() << endl;
-	std::cout << "[DEBUG] Data mean: " << normalized_volume.mean() << endl;
-	std::cout << "[DEBUG] Data std: " << std::sqrt(normalized_volume.variance()) << endl;
 	
 	// 计算非零区域的统计（用于对比）
 	// 使用seg_mask判断前景区域，与Python一致
@@ -955,80 +830,24 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 			}
 		}
 		double nonzero_std_after = std::sqrt(nonzero_var_after / nonzero_count_after);
-		std::cout << "[DEBUG] Non-zero region stats after norm: mean=" << nonzero_mean_after 
-		          << ", std=" << nonzero_std_after << ", pixels=" << nonzero_count_after << endl;
 	}
 	
 	// 输出特定位置的值（用于精确对比）
 	if (normalized_volume.depth() > 2 && normalized_volume.height() > 162 && normalized_volume.width() > 44) {
-		std::cout << "[DEBUG] Value at (44,162,2) after norm: " << normalized_volume(44, 162, 2) << endl;
 	}
 	
-	// 输出一些采样点的归一化后值用于对比
-	std::cout << "[DEBUG] Sample points after normalization:" << endl;
-	for (int i = 0; i < 5 && i < normalized_volume.depth(); i++) {
-		for (int j = 0; j < 5 && j < normalized_volume.height(); j++) {
-			for (int k = 0; k < 5 && k < normalized_volume.width(); k++) {
-				if (std::abs(normalized_volume(k, j, i)) > 0.01) {  // 归一化后可能接近0
-					std::cout << "  (" << k << "," << j << "," << i << "): value=" 
-					          << normalized_volume(k, j, i) << endl;
-					break;
-				}
-			}
-		}
-	}
-	std::cout << "[DEBUG] ================================" << endl;
 
 	// Step 2: 重采样（在归一化后进行）
-	std::cout << "[DEBUG] Step 2: Resampling (after normalization)" << endl;
 	CImg<float> scaled_input_volume;
 	if (is_volume_scaled) {
 		// 使用三次插值（5）而不是线性插值（3）以匹配Python的order=3
 		// CImg插值模式: 0=最近邻, 1=线性, 2=移动平均, 3=线性, 5=三次(cubic)
 		scaled_input_volume = normalized_volume.get_resize(output_size[0], output_size[1], output_size[2], -100, 5);
-		std::cout << "Resampled from " << normalized_volume.width() << "x" << normalized_volume.height() << "x" << normalized_volume.depth()
-		          << " to " << scaled_input_volume.width() << "x" << scaled_input_volume.height() << "x" << scaled_input_volume.depth() << endl;
-		std::cout << "[DEBUG] Using cubic interpolation (mode=5) to match Python's order=3" << endl;
 	} else {
 		scaled_input_volume.assign(normalized_volume);
 	}
 
-	std::cout << "final_preprocessed_volume depth: " << scaled_input_volume.depth() << endl;
-	std::cout << "final_preprocessed_volume mean: " << scaled_input_volume.mean() << endl;
-	std::cout << "final_preprocessed_volume variance: " << scaled_input_volume.variance() << endl;
 	
-	// 添加详细的调试输出以便与Python版本对比
-	std::cout << "[DEBUG] === Preprocessing Summary ===" << endl;
-	std::cout << "[DEBUG] Normalization type: " << config.normalization_type << endl;
-	std::cout << "[DEBUG] Use mask for norm: " << (config.use_mask_for_norm ? "true" : "false") << endl;
-	if (!config.use_mask_for_norm) {
-		std::cout << "[DEBUG] Intensity mean used: " << intensity_mean << endl;
-		std::cout << "[DEBUG] Intensity std used: " << intensity_std << endl;
-	} else {
-		std::cout << "[DEBUG] Intensity stats: dynamically calculated on mask region" << endl;
-	}
-	std::cout << "[DEBUG] Final volume shape: " << scaled_input_volume.width() << "x" 
-	          << scaled_input_volume.height() << "x" << scaled_input_volume.depth() << endl;
-	std::cout << "[DEBUG] Final volume min: " << scaled_input_volume.min() << endl;
-	std::cout << "[DEBUG] Final volume max: " << scaled_input_volume.max() << endl;
-	std::cout << "[DEBUG] Final volume mean: " << scaled_input_volume.mean() << endl;
-	std::cout << "[DEBUG] Final volume std: " << std::sqrt(scaled_input_volume.variance()) << endl;
-	
-	// 输出一些采样点的值以便详细对比
-	if (scaled_input_volume.size() > 0) {
-		int sample_z = scaled_input_volume.depth() / 2;
-		int sample_y = scaled_input_volume.height() / 2;
-		int sample_x = scaled_input_volume.width() / 2;
-		std::cout << "[DEBUG] Sample value at center (" << sample_x << "," << sample_y << "," << sample_z << "): " 
-		          << scaled_input_volume(sample_x, sample_y, sample_z) << endl;
-		
-		// 输出索引(2,162,44)处的值以对比最大差异位置
-		if (scaled_input_volume.depth() > 2 && scaled_input_volume.height() > 162 && scaled_input_volume.width() > 44) {
-			std::cout << "[DEBUG] Value at index (44,162,2) [x,y,z]: " 
-			          << scaled_input_volume(44, 162, 2) << endl;
-		}
-	}
-	std::cout << "[DEBUG] =========================" << endl;
 
 	// 保存预处理数据
 	if (saveIntermediateResults) {
@@ -1038,22 +857,31 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 		savePreprocessedData(scaled_input_volume, L"preprocessed_normalized_volume");
 	}
 
+	auto preprocess_end = std::chrono::steady_clock::now();
+	std::chrono::duration<double> preprocess_elapsed = preprocess_end - preprocess_start;
+	std::cout << "Preprocessing completed in " << preprocess_elapsed.count() << " seconds" << endl;
+	std::cout << "  Preprocessed volume shape: " << scaled_input_volume.width() << " x " << scaled_input_volume.height() << " x " << scaled_input_volume.depth() << endl;
+	std::cout << "  Mean: " << scaled_input_volume.mean() << ", Std: " << std::sqrt(scaled_input_volume.variance()) << endl;
+	std::cout << "======= Preprocessing Complete =======" << endl;
+
 	//调用滑窗推理函数
-	std::cout << "[DEBUG] Calling slidingWindowInfer..." << endl;
+	std::cout << "\n======= Sliding Window Inference =======" << endl;
+	auto inference_start = std::chrono::steady_clock::now();
 	try {
 		AI_INT is_ok = slidingWindowInfer(config, scaled_input_volume);
-		std::cout << "slidingWindowInfer returned: " << is_ok << endl;
 		if (is_ok != DentalCbctSegAI_STATUS_SUCCESS) {
-			std::cerr << "[ERROR] slidingWindowInfer failed with code: " << is_ok << endl;
 			return is_ok;
 		}
 	} catch (const std::exception& e) {
-		std::cerr << "[ERROR] Exception in slidingWindowInfer: " << e.what() << endl;
 		return DentalCbctSegAI_STATUS_FAIED;
 	} catch (...) {
-		std::cerr << "[ERROR] Unknown exception in slidingWindowInfer" << endl;
 		return DentalCbctSegAI_STATUS_FAIED;
 	}
+
+	auto inference_end = std::chrono::steady_clock::now();
+	std::chrono::duration<double> inference_elapsed = inference_end - inference_start;
+	std::cout << "Inference completed in " << inference_elapsed.count() << " seconds" << endl;
+	std::cout << "======= Inference Complete =======" << endl;
 
 	//如果进行了3D重采样，调整大小
 	if (is_volume_scaled)
@@ -1062,6 +890,7 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	// 保存模型输出（概率体）
 	if (saveIntermediateResults) {
 		saveModelOutput(predicted_output_prob, L"model_output_probability");
+		std::cout << "  Model output saved to: result/model_output/" << endl;
 	}
 
 	// 不在这里执行argmax，保持概率图供后续处理
@@ -1074,33 +903,26 @@ AI_INT  DentalUnet::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume)
 {
 	if (use_gpu) {
-		std::cout << "[DEBUG] Configuring CUDA provider..." << endl;
 		try {
 			OrtCUDAProviderOptions cuda_options;
 			//cuda_options.gpu_mem_limit = 6 * 1024 * 1024 * 1024;  // 设置显存6GB限制[6,12](@ref)
 			cuda_options.device_id = 0;
 			session_options.AppendExecutionProvider_CUDA(cuda_options);
-			std::cout << "[DEBUG] CUDA provider configured successfully" << endl;
 		} catch (const Ort::Exception& e) {
-			std::cerr << "[WARNING] Failed to configure CUDA provider: " << e.what() << endl;
-			std::cerr << "[WARNING] Falling back to CPU" << endl;
 		}
 	}
 
-	std::cout << "env setting is done" << endl;
 
 	// 创建会话
 	Ort::AllocatorWithDefaultOptions allocator;
 	
 	// 检查模型文件名
 	if (config.model_file_name == nullptr) {
-		std::cerr << "ERROR: Model file name is NULL!" << endl;
 		return DentalCbctSegAI_LOADING_FAIED;
 	}
 	
 	//try-catch处理ONNX Runtime异常
 	try {
-		std::cout << "Creating ONNX session..." << endl;
 		
 		Ort::Session session(env, config.model_file_name, session_options);
 		
@@ -1111,14 +933,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		const char* input_name = input_name_ptr.get();
 		const char* output_name = output_name_ptr.get();
 
-		std::cout << "Session loading is done: " << endl;
-		std::cout << "input_name: " << input_name << endl;
-		std::cout << "output_name: " << output_name << endl;
 		
 		// 验证输入输出名称
 		if (strcmp(input_name, output_name) == 0) {
-			std::cerr << "[WARNING] Input and output have the same name: " << input_name << endl;
-			std::cerr << "[WARNING] This might indicate a problem with the ONNX model" << endl;
 		}
 		auto input_shape = session.GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
 
@@ -1177,12 +994,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		padded_volume = normalized_volume;
 	}
 	
-	std::cout << "[DEBUG] Padding information:" << endl;
-	std::cout << "  Original size: " << width << "x" << height << "x" << depth << endl;
-	std::cout << "  Padded size: " << padded_width << "x" << padded_height << "x" << padded_depth << endl;
-	std::cout << "  Padding: depth[" << pad_depth_before << "," << pad_depth_after 
-	          << "] width[" << pad_width_before << "," << pad_width_after 
-	          << "] height[" << pad_height_before << "," << pad_height_after << "]" << endl;
 	
 	// 使用padded dimensions进行后续计算
 	int working_depth = padded_depth;
@@ -1223,16 +1034,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		actualStepSize[2] = 0;
 	}
 
-	if (NETDEBUG_FLAG) {
-		std::cout << "[DEBUG] Tile calculation:" << endl;
-		std::cout << "  Working volume dimensions (padded): " << working_width << "x" << working_height << "x" << working_depth << endl;
-		std::cout << "  Patch size: " << config.patch_size[2] << "x" << config.patch_size[1] << "x" << config.patch_size[0] << " (WxHxD)" << endl;
-		std::cout << "  Step size ratio: " << step_size_ratio << endl;
-		std::cout << "  Actual step sizes: X=" << actualStepSize[0] << ", Y=" << actualStepSize[1] << ", Z=" << actualStepSize[2] << endl;
-		std::cout << "  Number of steps: X=" << X_num_steps << ", Y=" << Y_num_steps << ", Z=" << Z_num_steps << endl;
-		std::cout << "  Total number of tiles: " << X_num_steps * Y_num_steps * Z_num_steps << endl;
-		std::cout << "  TTA (use_mirroring): " << (config.use_mirroring ? "enabled (NOT IMPLEMENTED)" : "disabled") << endl;
-	}
 
 	//初始化输出概率体（使用padded dimensions）
 	CImg<float> padded_output_prob = CImg<float>(working_width, working_height, working_depth, config.num_classes, 0.f);
@@ -1247,6 +1048,12 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 	size_t input_patch_voxel_numel = config.patch_size[0] * config.patch_size[1] * config.patch_size[2];
 	size_t output_patch_vol_sz = config.num_classes * config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float);
 
+	// 输出tile总体信息
+	int total_tiles = X_num_steps * Y_num_steps * Z_num_steps;
+	std::cout << "Total tiles to process: " << total_tiles << endl;
+	std::cout << "Tile grid: " << X_num_steps << " x " << Y_num_steps << " x " << Z_num_steps << " (X x Y x Z)" << endl;
+	std::cout << "Patch size: " << config.patch_size[2] << " x " << config.patch_size[1] << " x " << config.patch_size[0] << " (W x H x D)" << endl;
+	
 	//
 	int patch_count = 0;
 	for (int sz = 0; sz < Z_num_steps; sz++)
@@ -1280,23 +1087,20 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 				int ub_x = lb_x + config.patch_size[2] - 1;
 
 				patch_count += 1;
-				if (NETDEBUG_FLAG)
-					std::cout << "current tile#: " << patch_count << endl;
-
-				std::cout << "[DEBUG] Patch bounds - X: [" << lb_x << ", " << ub_x << "], Y: [" << lb_y << ", " << ub_y << "], Z: [" << lb_z << ", " << ub_z << "]" << endl;
+				
+				// 输出当前tile信息
+				std::cout << "\nProcessing tile #" << patch_count << "/" << total_tiles << "..." << endl;
+				std::cout << "  Position: [" << lb_x << "-" << ub_x << ", " 
+				          << lb_y << "-" << ub_y << ", " 
+				          << lb_z << "-" << ub_z << "]" << endl;
 
 				CImg<float> input_patch;
 				try {
 					input_patch = padded_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
-					//std::cout << "input_patch mean: " << input_patch.mean() << endl;
-					//std::cout << "input_patch variance: " << input_patch.variance() << endl;
-					std::cout << "input_patch dimensions: " << input_patch.width() << "x" << input_patch.height() << "x" << input_patch.depth() << endl;
 					if (input_patch.width() != config.patch_size[2] || input_patch.height() != config.patch_size[1] || input_patch.depth() != config.patch_size[0]) {
-						std::cerr << "[ERROR] Patch size mismatch! Expected: " << config.patch_size[2] << "x" << config.patch_size[1] << "x" << config.patch_size[0] << " (WxHxD)" << endl;
 						return DentalCbctSegAI_STATUS_FAIED;
 					}
 				} catch (const CImgException& e) {
-					std::cerr << "[ERROR] CImg exception during cropping: " << e.what() << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
@@ -1316,12 +1120,9 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					input_tensor_shape.data(),
 					input_tensor_shape.size());
 
-				// 
-				std::cout << "[DEBUG] Running ONNX inference for patch #" << patch_count << endl;
 				
 				// 验证输入 tensor
 				if (input_data_ptr == nullptr) {
-					std::cerr << "[ERROR] Input data pointer is null!" << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
@@ -1332,7 +1133,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					//session_ptr = std::make_unique<Ort::Session>(env, config.model_file_name, session_options);
 
 					//auto output_tensors = session_ptr->Run(
-					std::cout << "[DEBUG] Calling session.Run()..." << endl;
 					output_tensors = session.Run(
 						Ort::RunOptions{ nullptr },
 						&input_name,
@@ -1341,7 +1141,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						&output_name,
 						1
 					);
-					std::cout << "[DEBUG] session.Run() completed successfully" << endl;
 
 					// 暂时禁用TTA以简化调试
 					// TODO: 实现完整的TTA（7种镜像组合）
@@ -1352,52 +1151,37 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 					}
 					*/
 
-					std::cout << "[DEBUG] ONNX inference completed for patch #" << patch_count << endl;
 				} catch (const Ort::Exception& e) {
-					std::cerr << "[ERROR] ONNX Runtime exception during inference: " << e.what() << endl;
-					std::cerr << "[ERROR] Error code: " << e.GetOrtErrorCode() << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				} catch (const std::exception& e) {
-					std::cerr << "[ERROR] Standard exception during inference: " << e.what() << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				} catch (...) {
-					std::cerr << "[ERROR] Unknown exception during inference" << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
 				// 处理输出张量
-				std::cout << "[DEBUG] Processing output tensor..." << endl;
 				
 				if (output_tensors.empty()) {
-					std::cerr << "[ERROR] No output tensors returned from inference!" << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 				
 				float* output_data = output_tensors[0].GetTensorMutableData<float>();
 				
 				if (output_data == nullptr) {
-					std::cerr << "[ERROR] Output data pointer is null!" << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
 
 				// 复制到CImg
-				std::cout << "[DEBUG] Copying output data to win_pob..." << endl;
 				std::memcpy(win_pob.data(), output_data, output_patch_vol_sz);
 				output_tensors.clear();
 				//input_tensor.release();
 
-				std::cout << "[DEBUG] Output patch statistics:" << endl;
-				std::cout << "  - Min: " << win_pob.min() << endl;
-				std::cout << "  - Max: " << win_pob.max() << endl;
-				std::cout << "  - Mean: " << win_pob.mean() << endl;
-				std::cout << "  - Dimensions: " << win_pob.width() << "x" << win_pob.height() << "x" << win_pob.depth() << "x" << win_pob.spectrum() << endl;
 
 				// 保存单个tile
 				if (saveIntermediateResults) {
 					saveTile(win_pob, patch_count, lb_x, lb_y, lb_z);
 				}
 
-				std::cout << "[DEBUG] Accumulating patch results..." << endl;
 				try {
 					cimg_forXYZC(win_pob, x, y, z, c) {
 						int gx = lb_x + x;
@@ -1406,7 +1190,6 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						
 						// 写入前验证边界（使用padded dimensions）
 						if (gx < 0 || gx >= working_width || gy < 0 || gy >= working_height || gz < 0 || gz >= working_depth) {
-							std::cerr << "[ERROR] Out of bounds write attempt: (" << gx << ", " << gy << ", " << gz << ")" << endl;
 							return DentalCbctSegAI_STATUS_FAIED;
 						}
 						
@@ -1416,9 +1199,10 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 						count_vol(lb_x + x, lb_y + y, lb_z + z) += gaussisan_weight(x, y, z);
 					}
 				} catch (const std::exception& e) {
-					std::cerr << "[ERROR] Exception during patch accumulation: " << e.what() << endl;
 					return DentalCbctSegAI_STATUS_FAIED;
 				}
+				
+				std::cout << "Tile #" << patch_count << " completed" << endl;
 			}
 		}
 	}
@@ -1440,16 +1224,12 @@ AI_INT  DentalUnet::slidingWindowInfer(nnUNetConfig config, CImg<float> normaliz
 		predicted_output_prob = padded_output_prob;
 	}
 	
-	std::cout << "[DEBUG] Removed padding, final output size: " << predicted_output_prob.width() 
-	          << "x" << predicted_output_prob.height() << "x" << predicted_output_prob.depth() << endl;
 	std::cout << "Sliding window inference is done." << endl;
 
 	return DentalCbctSegAI_STATUS_SUCCESS;
 	} catch (const Ort::Exception& e) {
-		std::cerr << "ONNX Runtime exception in slidingWindowInfer: " << e.what() << endl;
 		return DentalCbctSegAI_LOADING_FAIED;
 	} catch (const std::exception& e) {
-		std::cerr << "Standard exception in slidingWindowInfer: " << e.what() << endl;
 		return DentalCbctSegAI_STATUS_FAIED;
 	}
 }
@@ -1461,24 +1241,13 @@ void DentalUnet::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 	double lower_bound = config.percentile_00_5;
 	double upper_bound = config.percentile_99_5;
 	
-	std::cout << "[DEBUG] CTNormalization parameters:" << endl;
-	std::cout << "  - lower_bound (percentile_00_5): " << lower_bound << endl;
-	std::cout << "  - upper_bound (percentile_99_5): " << upper_bound << endl;
-	std::cout << "  - mean: " << config.mean_std_HU[0] << endl;
-	std::cout << "  - std: " << config.mean_std_HU[1] << endl;
-	std::cout << "  - Data range before clipping: [" << input_volume.min() << ", " << input_volume.max() << "]" << endl;
-	
 	input_volume.cut(lower_bound, upper_bound);
-	
-	std::cout << "  - Data range after clipping: [" << input_volume.min() << ", " << input_volume.max() << "]" << endl;
 
 	//应用z-score标准化（使用double提高精度）
 	double mean_hu4dentalCTNormalization = config.mean_std_HU[0];
 	double std_hu4dentalCTNormalization = config.mean_std_HU[1];
 	input_volume -= mean_hu4dentalCTNormalization;
 	input_volume /= std_hu4dentalCTNormalization;
-	
-	std::cout << "  - Data range after normalization: [" << input_volume.min() << ", " << input_volume.max() << "]" << endl;
 }
 
 
@@ -1502,9 +1271,6 @@ void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const 
 	float y_sigma = height * sigma_scale;
 	float x_sigma = width  * sigma_scale;
 	
-	std::cout << "[DEBUG] Gaussian kernel parameters:" << endl;
-	std::cout << "  - Patch size: [" << depth << ", " << height << ", " << width << "]" << endl;
-	std::cout << "  - Sigmas: [" << z_sigma << ", " << y_sigma << ", " << x_sigma << "]" << endl;
 
 	float z_part = 0.f;
 	float y_part = 0.f;
@@ -1535,10 +1301,6 @@ void DentalUnet::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const 
 		}
 	}
 	
-	std::cout << "[DEBUG] Gaussian weight statistics:" << endl;
-	std::cout << "  - Min: " << gaussisan_weight.min() << endl;
-	std::cout << "  - Max: " << gaussisan_weight.max() << endl;
-	std::cout << "  - Mean: " << gaussisan_weight.mean() << endl;
 }
 
 
@@ -1571,17 +1333,11 @@ CImg<short> DentalUnet::argmax_spectrum(const CImg<float>& input) {
 
 AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 {
-	std::cout << "[DEBUG] getSegMask called - performing post-processing" << endl;
-	std::cout << "[DEBUG] Original dimensions: " << Width0 << "x" << Height0 << "x" << Depth0 << endl;
-	std::cout << "[DEBUG] Probability volume dimensions: " << predicted_output_prob.width() 
-	          << "x" << predicted_output_prob.height() << "x" << predicted_output_prob.depth() 
-	          << "x" << predicted_output_prob.spectrum() << " (spectrum=" << predicted_output_prob.spectrum() << ")" << endl;
+	std::cout << "\n======= Post-processing Stage =======" << endl;
+	auto postprocess_start = std::chrono::steady_clock::now();
 	
 	// 步骤1：对概率图执行argmax（在转置后的坐标系中）
-	std::cout << "[DEBUG] Step 1: Performing argmax on probability volume" << endl;
 	output_seg_mask = argmax_spectrum(predicted_output_prob);
-	std::cout << "[DEBUG] Segmentation mask dimensions after argmax: " 
-	          << output_seg_mask.width() << "x" << output_seg_mask.height() << "x" << output_seg_mask.depth() << endl;
 	
 	// 保存后处理数据（在转置撤销前）
 	if (saveIntermediateResults) {
@@ -1589,25 +1345,16 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 	}
 	
 	// 步骤2：撤销转置（恢复到原始坐标系）
-	std::cout << "[DEBUG] Step 2: Reverting transpose" << endl;
 	output_seg_mask.permute_axes(unetConfig.cimg_transpose_backward);
-	std::cout << "[DEBUG] Segmentation mask dimensions after transpose revert: " 
-	          << output_seg_mask.width() << "x" << output_seg_mask.height() << "x" << output_seg_mask.depth() << endl;
 	
 	// 步骤3：检查是否需要恢复裁剪
 	if (output_seg_mask.width() != Width0 || output_seg_mask.height() != Height0 || output_seg_mask.depth() != Depth0) {
-		std::cout << "[DEBUG] Step 3: Restoring cropped result to original size" << endl;
 		
 		// 创建原始尺寸的结果mask，初始化为0
 		CImg<short> full_result(Width0, Height0, Depth0, 1, 0);
 		
 		// 先检查bbox是否已经初始化
 		if (crop_bbox.x_max == -1 || crop_bbox.y_max == -1 || crop_bbox.z_max == -1) {
-			std::cout << "[ERROR] Crop bbox appears uninitialized!" << endl;
-			std::cout << "[ERROR] Bbox values: X[" << crop_bbox.x_min << ":" << crop_bbox.x_max 
-			          << "], Y[" << crop_bbox.y_min << ":" << crop_bbox.y_max 
-			          << "], Z[" << crop_bbox.z_min << ":" << crop_bbox.z_max << "]" << endl;
-			std::cout << "[ERROR] This suggests crop_to_nonzero was not called properly" << endl;
 			
 			// 使用fallback逻辑
 			int copy_width = std::min(output_seg_mask.width(), Width0);
@@ -1626,9 +1373,6 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 		    crop_bbox.y_min >= 0 && crop_bbox.y_max < Height0 &&
 		    crop_bbox.z_min >= 0 && crop_bbox.z_max < Depth0) {
 		    
-		    std::cout << "[DEBUG] Restoring cropped result using bbox: X[" << crop_bbox.x_min << ":" << crop_bbox.x_max 
-		              << "], Y[" << crop_bbox.y_min << ":" << crop_bbox.y_max 
-		              << "], Z[" << crop_bbox.z_min << ":" << crop_bbox.z_max << "]" << endl;
 		    
 		    // 将output_seg_mask的内容复制到full_result的对应位置
 		    cimg_forXYZ(output_seg_mask, x, y, z) {
@@ -1640,20 +1384,12 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 		        }
 		    }
 		} else {
-		    std::cout << "[WARNING] Invalid crop bbox detected!" << endl;
-		    std::cout << "[WARNING] Crop bbox values: X[" << crop_bbox.x_min << ":" << crop_bbox.x_max 
-		              << "], Y[" << crop_bbox.y_min << ":" << crop_bbox.y_max 
-		              << "], Z[" << crop_bbox.z_min << ":" << crop_bbox.z_max << "]" << endl;
-		    std::cout << "[WARNING] Original image bounds: X[0:" << (Width0-1) 
-		              << "], Y[0:" << (Height0-1) << "], Z[0:" << (Depth0-1) << "]" << endl;
-		    std::cout << "[WARNING] Attempting to copy as much as possible..." << endl;
 		    
 		    // 如果bbox无效，尝试直接复制能复制的部分
 		    int copy_width = std::min(output_seg_mask.width(), Width0);
 		    int copy_height = std::min(output_seg_mask.height(), Height0);
 		    int copy_depth = std::min(output_seg_mask.depth(), Depth0);
 		    
-		    std::cout << "[WARNING] Copying dimensions: " << copy_width << "x" << copy_height << "x" << copy_depth << endl;
 		    
 		    for (int z = 0; z < copy_depth; z++) {
 		        for (int y = 0; y < copy_height; y++) {
@@ -1667,10 +1403,8 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 		// 复制恢复后的结果
 		long volSize = Width0 * Height0 * Depth0 * sizeof(short);
 		std::memcpy(dstData->ptr_Data, full_result.data(), volSize);
-		std::cout << "[DEBUG] Result restored to original dimensions" << endl;
 		
 	} else {
-		std::cout << "[DEBUG] Using output_seg_mask directly (dimensions match)" << endl;
 		// 如果尺寸匹配，直接复制
 		long volSize = Width0 * Height0 * Depth0 * sizeof(short);
 		std::memcpy(dstData->ptr_Data, output_seg_mask.data(), volSize);
@@ -1692,9 +1426,14 @@ AI_INT  DentalUnet::getSegMask(AI_DataInfo *dstData)
 		CImg<short> final_result(dstData->Width, dstData->Height, dstData->Depth, 1);
 		std::memcpy(final_result.data(), dstData->ptr_Data, dstData->Width * dstData->Height * dstData->Depth * sizeof(short));
 		savePostprocessedData(final_result, L"postprocessed_segmentation_mask_final");
+		std::cout << "  Post-processed result saved to: result/postprocess/" << endl;
 	}
 
-	std::cout << "[DEBUG] getSegMask completed" << endl;
+	auto postprocess_end = std::chrono::steady_clock::now();
+	std::chrono::duration<double> postprocess_elapsed = postprocess_end - postprocess_start;
+	std::cout << "Post-processing completed in " << postprocess_elapsed.count() << " seconds" << endl;
+	std::cout << "======= Post-processing Complete =======" << endl;
+	
 	return DentalCbctSegAI_STATUS_SUCCESS;
 }
 
@@ -1758,7 +1497,6 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 	try {
 		writer->Update();
 	} catch (itk::ExceptionObject& e) {
-		std::cerr << "Error saving preprocessed data: " << e << std::endl;
 	}
 	
 	// 保存为二进制格式供numpy使用
@@ -1781,9 +1519,6 @@ void DentalUnet::savePreprocessedData(const CImg<float>& data, const std::wstrin
 	metaFile << "description: Preprocessed normalized volume" << std::endl;
 	metaFile.close();
 	
-	std::cout << "[DEBUG] Saved preprocessed data:" << std::endl;
-	std::cout << "  - NIfTI format: " << narrowNiftiPath << std::endl;
-	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
 }
 
 
@@ -1855,7 +1590,6 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	try {
 		writer->Update();
 	} catch (itk::ExceptionObject& e) {
-		std::cerr << "Error saving model output: " << e << std::endl;
 	}
 	
 	// 保存为二进制格式供numpy使用
@@ -1878,9 +1612,6 @@ void DentalUnet::saveModelOutput(const CImg<float>& data, const std::wstring& fi
 	metaFile << "description: Model output probability volume (channels, depth, height, width)" << std::endl;
 	metaFile.close();
 	
-	std::cout << "[DEBUG] Saved model output:" << std::endl;
-	std::cout << "  - NIfTI format: " << narrowNiftiPath << std::endl;
-	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
 }
 
 
@@ -1943,7 +1674,6 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 	try {
 		writer->Update();
 	} catch (itk::ExceptionObject& e) {
-		std::cerr << "Error saving postprocessed data: " << e << std::endl;
 	}
 	
 	// 保存为二进制格式供numpy使用
@@ -1966,9 +1696,6 @@ void DentalUnet::savePostprocessedData(const CImg<short>& data, const std::wstri
 	metaFile << "description: Postprocessed segmentation mask" << std::endl;
 	metaFile.close();
 	
-	std::cout << "[DEBUG] Saved postprocessed data:" << std::endl;
-	std::cout << "  - NIfTI format: " << narrowNiftiPath << std::endl;
-	std::cout << "  - Raw binary: " << narrowRawPath << std::endl;
 }
 
 
@@ -2009,9 +1736,6 @@ void DentalUnet::saveTile(const CImg<float>& tile, int tileIndex, int x, int y, 
 	metaFile << "tile_index: " << tileIndex << std::endl;
 	metaFile.close();
 	
-	if (tileIndex % 10 == 0) {  // Log every 10th tile to reduce output
-		std::cout << "[DEBUG] Saved tile " << tileIndex << endl;
-	}
 }
 
 

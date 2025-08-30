@@ -93,7 +93,7 @@ string selectFileFromDirectory(const string& directory, const string& fileType, 
     }
     
     // 显示文件列表
-    cout << "\\n" << fileType << " files:" << endl;
+    cout << "\n" << fileType << " files:" << endl;
     for (size_t i = 0; i < files.size(); ++i) {
         cout << "[" << (i + 1) << "] " << files[i] << endl;
     }
@@ -117,7 +117,7 @@ int main()
         cout << "程序开始运行..." << endl;
         
         //===== 用户选择配置文件 =====
-        cout << "\\n======= Config File Selection =======" << endl;
+        cout << "\n======= Config File Selection =======" << endl;
         vector<string> configExtensions = {".json"};
         string configPath = selectFileFromDirectory("..\\\\..\\\\..\\\\param", "config", configExtensions);
         if (configPath.empty()) {
@@ -127,7 +127,7 @@ int main()
         }
         
         //===== 用户选择模型文件 =====
-        cout << "\\n======= Model File Selection =======" << endl;
+        cout << "\n======= Model File Selection =======" << endl;
         vector<string> modelExtensions = {".onnx"};
         string modelPath = selectFileFromDirectory("..\\\\..\\\\..\\\\model", "model", modelExtensions);
         if (modelPath.empty()) {
@@ -137,7 +137,7 @@ int main()
         }
         
         //===== 用户选择输入数据文件 =====
-        cout << "\\n======= Input Data File Selection =======" << endl;
+        cout << "\n======= Input Data File Selection =======" << endl;
         vector<string> inputExtensions = {".hdr", ".nii", ".nii.gz"};
         string inputHdrPath = selectFileFromDirectory("..\\\\..\\\\..\\\\img", "input data", inputExtensions);
         if (inputHdrPath.empty()) {
@@ -147,7 +147,7 @@ int main()
         }
         
         //===== 读取JSON配置文件内容 =====
-        cout << "\\n======= Loading Configuration =======" << endl;
+        cout << "\n======= Loading Configuration =======" << endl;
         string jsonContent = readJsonFile(configPath);
         if (jsonContent.empty()) {
             cout << "Failed to read config file!" << endl;
@@ -157,7 +157,7 @@ int main()
         cout << "Configuration loaded successfully." << endl;
         
         //===== 使用ITK加载图像 =====
-        cout << "\\n======= Loading Image =======" << endl;
+        cout << "\n======= Loading Image =======" << endl;
         cout << "Loading: " << inputHdrPath << endl;
         
         // ITK图像类型定义
@@ -216,7 +216,7 @@ int main()
         srcData->ptr_Data = inputCbctVolume.data();
 
         //===== 初始化分割模型 =====
-        cout << "\\n======= Initializing Model =======" << endl;
+        cout << "\n======= Initializing Model =======" << endl;
         AI_HANDLE AI_Hdl = DentalCbctSegAI_CreateObj();
         if (AI_Hdl == NULL) {
             cout << "Model initialization failed!" << endl;
@@ -257,7 +257,7 @@ int main()
             const_cast<wchar_t*>(postprocessPath.c_str()));
         
         //===== 执行分割推理 =====
-        cout << "\\n======= Running Inference =======" << endl;
+        cout << "\n======= Running Inference =======" << endl;
         auto start = chrono::steady_clock::now();
         
         AI_INT AIWorkStatus = DentalCbctSegAI_Infer(AI_Hdl, srcData);
@@ -274,7 +274,7 @@ int main()
         cout << "Inference completed in " << elapsed.count() << "s" << endl;
         
         //===== 获取结果并保存 =====
-        cout << "\\n======= Saving Results =======" << endl;
+        cout << "\n======= Saving Results =======" << endl;
         
         // 准备结果数据结构
         CImg<short> toothLabelMask = CImg<short>(size[0], size[1], size[2], 1, 0);
@@ -323,7 +323,7 @@ int main()
         free(srcData);
         free(toothSegData);
         
-        cout << "\\nProgram completed successfully!" << endl;
+        cout << "\nProgram completed successfully!" << endl;
         system("pause");
         return 0;
         

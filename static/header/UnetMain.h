@@ -182,20 +182,13 @@ private:
 	//设置CBCT输入数据
 	AI_INT  setInput(AI_DataInfo *srcData); 
 
-	AI_INT  initializeOnnxruntimeInstances();
+	AI_INT  setOnnxruntimeInstances();
 
 	//uunet分割模型基础卷积神经分割
 	AI_INT  segModelInfer(nnUNetConfig config, CImg<short> input_volume);
-	AI_INT  slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume);
 
 	AI_INT   postProcessing();// 对分割结果进行后处理
 
-	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
-	void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);
-	CImg<short> argmax_spectrum(const CImg<float>& input);
-	
-	// 预处理步骤函数
-	CImg<short> crop_to_nonzero(const CImg<short>& input, CropBBox& bbox);
 	
 	// 保存中间结果文件的方法
 	void    savePreprocessedData(const CImg<float>& data, const std::wstring& filename);

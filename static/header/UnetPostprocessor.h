@@ -3,21 +3,18 @@
 #pragma once
 
 #include <chrono>
-#include "UnetMain.h"
 #include "CImg.h"
+#include "UnetSegAI_API.h"  // 包含AI_DataInfo的完整定义
 
-// Forward declaration for UnetMain class only
+// Forward declarations
 class UnetMain;
+struct nnUNetConfig;
+struct CropBBox;
 
 class UnetPostprocessor {
 public:
-    // 主后处理函数
-    static AI_INT processSegmentationMask(UnetMain* parent,
-                                         cimg_library::CImg<float>& prob_volume,
-                                         AI_DataInfo* dstData);
-    
-    // Argmax操作 - 从概率图得到分割结果
-    static cimg_library::CImg<short> argmaxSpectrum(const cimg_library::CImg<float>& input);
+    // 主后处理函数 - 执行完整的后处理流程
+    static AI_INT processSegmentationMask(UnetMain* parent, AI_DataInfo* dstData);
     
     // 恢复到原始尺寸
     static void restoreOriginalSize(const cimg_library::CImg<short>& input,

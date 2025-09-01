@@ -8,22 +8,16 @@
 // Forward declarations
 class UnetMain;
 
-struct ImageMetadata {
-    double origin[3];
-    double spacing[3];
-    double direction[9];
-};
-
 class UnetIO {
 public:
     // 保存预处理数据
-    static void savePreprocessedData(const cimg_library::CImg<float>& data, const std::wstring& path, const std::wstring& filename, const ImageMetadata& metadata);
+    static void savePreprocessedData(UnetMain* parent, const cimg_library::CImg<float>& data, const std::wstring& path, const std::wstring& filename);
     
     // 保存模型输出
     static void saveModelOutput(const cimg_library::CImg<float>& data, const std::wstring& path, const std::wstring& filename);
     
     // 保存后处理数据
-    static void savePostprocessedData(const cimg_library::CImg<short>& data, const std::wstring& path, const std::wstring& filename, const ImageMetadata& metadata);
+    static void savePostprocessedData(UnetMain* parent, const cimg_library::CImg<short>& data, const std::wstring& path, const std::wstring& filename);
     
     // 保存单个tile
     static void saveTile(const cimg_library::CImg<float>& tile, int tileIndex, int x, int y, int z, const std::wstring& path);

@@ -108,9 +108,6 @@ public:
 	AI_INT  performInference(AI_DataInfo *srcData); //执行分割推理
 
 	AI_INT  getSegMask(AI_DataInfo *dstData); //获取分割掩码
-
-	void    setDnnOptions(); //设置选项，是否使用cuda或opengl等扩展
-	void    setAlgParameter();
 	
 	// 设置输出路径
 	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
@@ -162,10 +159,7 @@ private:
 	CImg<short> output_seg_mask;
 
 	Ort::SessionOptions session_options;
-
-	//segmentation sessions ptr
-	//std::unique_ptr<Ort::Session> semantic_seg_session_ptr;
-	//std::unique_ptr<Ort::Session> ian_seg_session_ptr;
+	// 注：ONNX Session在UnetInference模块中按需创建，不在UnetMain中保存
 
 	//模型配置参数
 	nnUNetConfig unetConfig;
@@ -181,8 +175,6 @@ private:
 
 	//设置CBCT输入数据
 	AI_INT  setInput(AI_DataInfo *srcData); 
-
-	AI_INT  setOnnxruntimeInstances();
 
 	//uunet分割模型基础卷积神经分割
 	AI_INT  segModelInfer(nnUNetConfig config, CImg<short> input_volume);

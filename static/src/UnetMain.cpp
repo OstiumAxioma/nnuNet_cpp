@@ -27,8 +27,6 @@ UnetMain::UnetMain()
 			use_gpu = true;
 		}
 	}
-	//use_gpu = false;
-
 
 	// 模型路径应由外部设置通过 setModelFns 函数
 	unetConfig.model_file_name = nullptr;  // 初始化为空，等待外部设置
@@ -83,7 +81,6 @@ void  UnetMain::setModelFns(const wchar_t* model_fn)
 	
 	unetConfig.model_file_name = model_fn;
 }
-
 
 void  UnetMain::setStepSizeRatio(float ratio)
 {
@@ -215,15 +212,6 @@ bool UnetMain::setConfigFromJsonString(const char* jsonContent)
 	return false;
 }
 
-void UnetMain::setDnnOptions()
-{
-	//??????????????????????
-}
-
-void UnetMain::setAlgParameter()
-{
-	//????????????????
-}
 
 void UnetMain::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath)
 {
@@ -247,32 +235,6 @@ void UnetMain::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* mode
 	
 	// 如果设置了任何路径则启用保存
 	saveIntermediateResults = (preprocessPath != nullptr || modelOutputPath != nullptr || postprocessPath != nullptr);
-}
-
-AI_INT  UnetMain::setOnnxruntimeInstances()
-{
-	
-	if (use_gpu) {
-		try {
-			//OrtCUDAProviderOptions cuda_options;
-			//cuda_options.device_id = 0;  // 设置 GPU 设备 ID
-			//session_options.AppendExecutionProvider_CUDA(cuda_options);
-
-			Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
-		} catch (const Ort::Exception& e) {
-			use_gpu = false;
-		}
-	} else {
-	}
-	
-	// 设置线程数
-	session_options.SetIntraOpNumThreads(1);
-	session_options.SetInterOpNumThreads(1);
-
-	// 创建会话
-	//semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name.c_str(), session_options);
-
-	return UnetSegAI_STATUS_SUCCESS;
 }
 
 AI_INT  UnetMain::setInput(AI_DataInfo *srcData)

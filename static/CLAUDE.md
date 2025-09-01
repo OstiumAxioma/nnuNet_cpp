@@ -9,13 +9,14 @@ This is a medical image segmentation DLL library that provides C API for 3D medi
 ## Architecture (Refactored 2025-09-01)
 
 ### Modular Structure
-The codebase has been refactored from a monolithic design into a modular architecture:
+The codebase has been refactored from a monolithic design (3000+ lines) into a modular architecture:
 
 ```
-UnetMain (Controller) ~830 lines
+UnetMain (Controller) ~470 lines
     ├── UnetPreprocessor (Preprocessing Module) ~397 lines
     ├── UnetInference (Inference Module) ~422 lines  
-    └── UnetPostprocessor (Postprocessing Module) ~145 lines
+    ├── UnetPostprocessor (Postprocessing Module) ~145 lines
+    └── UnetIO (File I/O Module) ~250 lines
 ```
 
 ### API Layer (C Interface)
@@ -48,7 +49,13 @@ UnetMain (Controller) ~830 lines
    - `revertTranspose()` - Revert coordinate transpose
    - `restoreOriginalSize()` - Restore to original dimensions
 
-5. **ConfigParser.h/cpp** - JSON configuration parser
+5. **UnetIO.h/cpp** - File I/O module
+   - `savePreprocessedData()` - Save preprocessed volumes with metadata
+   - `saveModelOutput()` - Save model inference outputs
+   - `savePostprocessedData()` - Save final segmentation masks
+   - `saveTile()` - Save individual inference tiles for debugging
+
+6. **ConfigParser.h/cpp** - JSON configuration parser
    - Parses nnUNet configuration from JSON files
    - Supports model parameters and normalization settings
 
@@ -126,11 +133,18 @@ The API uses status codes:
 ## Recent Refactoring (2025-09-01)
 
 ### Changes Made:
-1. **Renamed all components** from "Dental" prefix to "Unet" prefix
-2. **Modularized monolithic code** into separate preprocessing, inference, and postprocessing modules
+1. **Renamed all components** from "Dental" prefix to "Unet" prefix for general-purpose use
+2. **Modularized monolithic code** (3000+ lines) into five separate modules:
+   - UnetMain (controller, ~470 lines)
+   - UnetPreprocessor (preprocessing, ~397 lines)
+   - UnetInference (inference, ~422 lines)
+   - UnetPostprocessor (postprocessing, ~145 lines)
+   - UnetIO (file I/O, ~250 lines)
 3. **Improved separation of concerns** with friend class pattern for module access
 4. **Removed redundant functions** and consolidated duplicate code
 5. **Enhanced precision** by using double for statistical calculations
+6. **Simplified UnetMain** to focus solely on workflow coordination
+7. **Centralized I/O operations** in dedicated UnetIO module
 
 ### Migration Notes:
 - All `DentalCbctSegAI_*` functions renamed to `UnetSegAI_*`
@@ -142,4 +156,3 @@ The API uses status codes:
 
 1. String encoding: Some comments contain non-UTF8 characters (GBK encoding)
 2. GPU memory issues may occur with large volumes when using CUDA provider
-3. IO operations still in UnetMain, could be further modularized

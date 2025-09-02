@@ -4,12 +4,13 @@
 
 #include <vector>
 #include <chrono>
-#include "UnetMain.h"
 #include "CImg.h"
 #include "onnxruntime_cxx_api.h"
 
-// Forward declaration for UnetMain class only
+// Forward declarations
 class UnetMain;
+struct nnUNetConfig;
+typedef int AI_INT;
 
 class UnetInference {
 public:

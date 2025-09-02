@@ -1,4 +1,5 @@
 #include "UnetMain.h"
+#include "UnetInference.h"
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -868,7 +869,9 @@ AI_INT  UnetMain::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 	std::cout << "\n======= Sliding Window Inference =======" << endl;
 	auto inference_start = std::chrono::steady_clock::now();
 	try {
-		AI_INT is_ok = slidingWindowInfer(config, scaled_input_volume);
+		// 使用新的UnetInference类进行推理
+		AI_INT is_ok = UnetInference::runSlidingWindow(this, config, scaled_input_volume, 
+		                                              predicted_output_prob, env, session_options, use_gpu);
 		if (is_ok != UnetSegAI_STATUS_SUCCESS) {
 			return is_ok;
 		}
@@ -900,6 +903,9 @@ AI_INT  UnetMain::segModelInfer(nnUNetConfig config, CImg<short> input_volume)
 }
 
 
+// slidingWindowInfer已移至UnetInference类
+// 以下函数已废弃，保留以便参考
+#if 0
 AI_INT  UnetMain::slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume)
 {
 	if (use_gpu) {
@@ -1233,6 +1239,7 @@ AI_INT  UnetMain::slidingWindowInfer(nnUNetConfig config, CImg<float> normalized
 		return UnetSegAI_STATUS_FAIED;
 	}
 }
+#endif // 结束slidingWindowInfer注释
 
 
 void UnetMain::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
@@ -1251,6 +1258,9 @@ void UnetMain::CTNormalization(CImg<float>& input_volume, nnUNetConfig config)
 }
 
 
+// create_3d_gaussian_kernel已移至UnetInference类
+// 以下函数已废弃，保留以便参考
+#if 0
 void UnetMain::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes)
 {
 	// 匹配Python版本：sigma_scale = 1/8
@@ -1302,6 +1312,7 @@ void UnetMain::create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const st
 	}
 	
 }
+#endif // 结束create_3d_gaussian_kernel注释
 
 
 CImg<short> UnetMain::argmax_spectrum(const CImg<float>& input) {

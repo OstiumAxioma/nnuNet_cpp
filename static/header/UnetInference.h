@@ -19,6 +19,12 @@ public:
                               nnUNetConfig config, 
                               cimg_library::CImg<short> input_volume);
     
+    // 归一化和重采样函数（不包括转置和裁剪）
+    static AI_INT normalizeAndResample(UnetMain* parent, 
+                                      nnUNetConfig& config, 
+                                      cimg_library::CImg<short>& input_volume, 
+                                      cimg_library::CImg<float>& output_volume);
+    
     // 滑动窗口推理
     static AI_INT slidingWindowInfer(UnetMain* parent,
                                     nnUNetConfig config,

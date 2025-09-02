@@ -253,7 +253,8 @@ void UnetPreprocessor::resampleVolume(const CImg<float>& input,
                                      const std::vector<int64_t>& output_size)
 {
     // 使用CImg的resize功能，采用立方插值（cubic interpolation）
-    output = input.get_resize(output_size[0], output_size[1], output_size[2], -100, 3);
+    // CImg插值模式: 0=最近邻, 1=线性, 2=移动平均, 3=线性, 5=三次(cubic/Lanczos)
+    output = input.get_resize(output_size[0], output_size[1], output_size[2], -100, 5);
 }
 
 // 统一的归一化接口

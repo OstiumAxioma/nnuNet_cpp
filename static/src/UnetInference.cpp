@@ -11,12 +11,94 @@
 using namespace std;
 using namespace cimg_library;
 
+// 归一化和重采样函数（不包括转置和裁剪）
+AI_INT UnetInference::normalizeAndResample(UnetMain* parent, nnUNetConfig& config, 
+                                          CImg<short>& input_volume, CImg<float>& output_volume)
+{
+    std::cout << "\n======= Preprocessing Stage =======" << endl;
+    auto preprocess_start = std::chrono::steady_clock::now();
+
+    // 获取parent的成员变量
+    auto& transposed_input_voxel_spacing = parent->transposed_input_voxel_spacing;
+    auto& transposed_original_voxel_spacing = parent->transposed_original_voxel_spacing;
+    auto& seg_mask = parent->seg_mask;
+    
+    if (transposed_input_voxel_spacing.size() != config.voxel_spacing.size()) {
+        throw std::runtime_error("Spacing dimensions mismatch");
+    }
+
+    // 使用与Python相同的逻辑：始终进行缩放
+    bool is_volume_scaled = true;
+    std::vector<int64_t> input_size = { input_volume.width(), input_volume.height(), input_volume.depth()};
+    std::vector<int64_t> output_size;
+    float scaled_factor = 1.f;
+    
+    for (int i = 0; i < 3; ++i) {  // 遍历三个维度
+        // 使用原始spacing计算缩放因子，与Python保持一致
+        scaled_factor = transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
+        int scaled_sz = std::round(input_size[i] * scaled_factor);
+        
+        if (scaled_sz < config.patch_size[i])
+            scaled_sz = config.patch_size[i];
+
+        output_size.push_back(static_cast<int64_t>(scaled_sz));
+    }
+
+    // Step 1: 归一化（在原始分辨率上进行）
+    CImg<float> normalized_volume;
+    normalized_volume.assign(input_volume);  // 转换为float
+    
+    // 保存归一化前的数据
+    if (parent->saveIntermediateResults) {
+        parent->savePreprocessedData(normalized_volume, L"before_normalization");
+    }
+    
+    // 获取intensity_mean和intensity_std的引用
+    double& intensity_mean = parent->intensity_mean;
+    double& intensity_std = parent->intensity_std;
+    
+    // 执行归一化
+    AI_INT norm_status = UnetPreprocessor::normalizeVolume(normalized_volume, seg_mask, config, intensity_mean, intensity_std);
+    if (norm_status != UnetSegAI_STATUS_SUCCESS) {
+        return norm_status;
+    }
+    
+    // Step 2: 重采样（在归一化后进行）
+    if (is_volume_scaled) {
+        // 执行重采样
+        UnetPreprocessor::resampleVolume(normalized_volume, output_volume, output_size);
+        
+        // 重采样seg_mask（最近邻插值）
+        if (!seg_mask.is_empty()) {
+            seg_mask = seg_mask.get_resize(output_size[0], output_size[1], output_size[2], -100, 1);
+        }
+    } else {
+        output_volume = normalized_volume;
+    }
+    
+    // 保存预处理后的数据
+    if (parent->saveIntermediateResults) {
+        parent->savePreprocessedData(output_volume, L"after_preprocessing");
+    }
+    
+    auto preprocess_end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> preprocess_elapsed = preprocess_end - preprocess_start;
+    std::cout << "Preprocessing completed in " << preprocess_elapsed.count() << " seconds" << endl;
+    std::cout << "======= Preprocessing Complete =======" << endl;
+    
+    return UnetSegAI_STATUS_SUCCESS;
+}
+
 // 主推理函数 - 执行完整的模型推理流程
 AI_INT UnetInference::segModelInfer(UnetMain* parent, nnUNetConfig config, CImg<short> input_volume)
 {
-    // 预处理阶段现在由UnetPreprocessor处理
+    // 注意：input_volume已经在performInference中被转置和裁剪过了
+    // 这里只需要进行归一化和重采样
     CImg<float> preprocessed_volume;
-    AI_INT preprocess_status = UnetPreprocessor::preprocessVolume(parent, config, input_volume, preprocessed_volume);
+    
+    // 直接调用归一化和重采样，不再调用完整的preprocessVolume
+    // 因为转置和裁剪已经在performInference中完成
+    AI_INT preprocess_status = normalizeAndResample(parent, config, input_volume, preprocessed_volume);
     if (preprocess_status != UnetSegAI_STATUS_SUCCESS) {
         return preprocess_status;
     }
@@ -53,13 +135,8 @@ AI_INT UnetInference::segModelInfer(UnetMain* parent, nnUNetConfig config, CImg<
         std::cout << "  Model output saved to: result/model_output/" << endl;
     }
 
-    // 生成分割掩码（argmax操作）
-    parent->output_seg_mask = UnetInference::argmax_spectrum(parent->predicted_output_prob);
-    
-    // 保存argmax后的mask
-    if (parent->saveIntermediateResults) {
-        parent->savePostprocessedData(parent->output_seg_mask, L"after_argmax");
-    }
+    // 不在这里执行argmax，保持概率图供后续处理
+    // argmax将在UnetPostprocessor::processSegmentationMask中执行
     
     return UnetSegAI_STATUS_SUCCESS;
 }
@@ -312,9 +389,11 @@ AI_INT UnetInference::slidingWindowInfer(UnetMain* parent, nnUNetConfig config, 
             }
         }
 
-        //归一化
+        //归一化（添加除零保护，匹配Python: n_predictions[n_predictions == 0] = 1e-8）
         cimg_forXYZC(padded_output_prob, x, y, z, c) {
-            padded_output_prob(x, y, z, c) /= count_vol(x, y, z);
+            float count = count_vol(x, y, z);
+            if (count < 1e-8f) count = 1e-8f;  // 防止除零
+            padded_output_prob(x, y, z, c) /= count;
         }
         
         // 从padded结果中提取原始尺寸的输出（移除padding）
@@ -344,7 +423,7 @@ void UnetInference::createGaussianKernel(CImg<float>& gaussisan_weight, const st
 {
     // 匹配Python版本：sigma_scale = 1/8
     float sigma_scale = 1.0f / 8.0f;
-    float value_scaling_factor = 10.0f;
+    // 移除value_scaling_factor，Python版本没有这个额外的缩放
 
     int64_t depth  = patch_sizes[0];
     int64_t height = patch_sizes[1]; 
@@ -367,9 +446,15 @@ void UnetInference::createGaussianKernel(CImg<float>& gaussisan_weight, const st
         float dx = (x - x_center) / x_sigma;
         
         float distance_squared = dx * dx + dy * dy + dz * dz;
-        float gaussian_value = std::exp(-0.5f * distance_squared) * value_scaling_factor;
+        float gaussian_value = std::exp(-0.5f * distance_squared);  // 不再乘以scaling factor
         
         gaussisan_weight(x, y, z) = gaussian_value;
+    }
+
+    // 归一化到最大值为1（匹配Python: gaussian_importance_map /= np.max(gaussian_importance_map)）
+    float max_value = gaussisan_weight.max();
+    if (max_value > 0) {
+        gaussisan_weight /= max_value;
     }
 
     // 找到最小非零值
@@ -385,7 +470,7 @@ void UnetInference::createGaussianKernel(CImg<float>& gaussisan_weight, const st
         min_non_zero = 1e-6f;
     }
 
-    // 将所有零值替换为最小非零值
+    // 将所有零值替换为最小非零值（匹配Python的避免除零策略）
     cimg_forXYZ(gaussisan_weight, x, y, z) {
         if (gaussisan_weight(x, y, z) == 0) {
             gaussisan_weight(x, y, z) = min_non_zero;

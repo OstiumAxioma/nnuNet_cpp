@@ -54,6 +54,17 @@ echo Build completed!
 echo ========================================
 echo.
 
+:: 复制编译生成的文件到主项目lib目录
+echo Copying generated files to main project lib directory...
+if exist "build\bin\Release\UnetOnnxSegDLL.dll" (
+    copy /Y "build\bin\Release\UnetOnnxSegDLL.dll" "..\lib\"
+    echo UnetOnnxSegDLL.dll copied to ..\lib\
+)
+if exist "build\lib\Release\UnetOnnxSegDLL.lib" (
+    copy /Y "build\lib\Release\UnetOnnxSegDLL.lib" "..\lib\"
+    echo UnetOnnxSegDLL.lib copied to ..\lib\
+)
+
 :: 确保目标目录存在
 if not exist "..\build\bin\Release" mkdir "..\build\bin\Release"
 if not exist "..\build\bin\Debug" mkdir "..\build\bin\Debug"

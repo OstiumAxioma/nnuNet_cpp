@@ -21,9 +21,6 @@ public:
     // 裁剪到非零区域
     static cimg_library::CImg<short> cropToNonzero(const cimg_library::CImg<short>& input, CropBBox& bbox);
     
-    // 创建前景/背景掩码
-    static cimg_library::CImg<short> createSegMask(const cimg_library::CImg<short>& input);
-    
     // CT归一化
     static void CTNormalization(cimg_library::CImg<float>& volume, const nnUNetConfig& config);
     
@@ -38,16 +35,6 @@ public:
     static void resampleVolume(const cimg_library::CImg<float>& input,
                               cimg_library::CImg<float>& output,
                               const std::vector<int64_t>& output_size);
-    
-    // 统一的归一化接口
-    static AI_INT normalizeVolume(cimg_library::CImg<float>& volume,
-                                 const cimg_library::CImg<short>& seg_mask,
-                                 const nnUNetConfig& config,
-                                 double& intensity_mean,
-                                 double& intensity_std);
-    
-    // 3D binary_fill_holes实现
-    static void binaryFillHoles3D(cimg_library::CImg<bool>& mask);
 };
 
 #endif // _UNET_PREPROCESSOR_H_

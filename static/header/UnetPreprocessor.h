@@ -19,7 +19,9 @@ public:
                                   cimg_library::CImg<float>& output_volume);
     
     // 裁剪到非零区域
-    static cimg_library::CImg<short> cropToNonzero(const cimg_library::CImg<short>& input, CropBBox& bbox);
+    static cimg_library::CImg<short> cropToNonzero(const cimg_library::CImg<short>& input, 
+                                                  CropBBox& bbox, 
+                                                  cimg_library::CImg<short>& seg_mask);
     
     // CT归一化
     static void CTNormalization(cimg_library::CImg<float>& volume, const nnUNetConfig& config);

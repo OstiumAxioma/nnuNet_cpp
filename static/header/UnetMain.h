@@ -184,21 +184,15 @@ private:
 
 	AI_INT  initializeOnnxruntimeInstances();
 
-	//uunet分割模型基础卷积神经分割
-	AI_INT  segModelInfer(nnUNetConfig config, CImg<short> input_volume);
-	// slidingWindowInfer已移至UnetInference类
-	// AI_INT  slidingWindowInfer(nnUNetConfig config, CImg<float> normalized_volume);
-
-	AI_INT   postProcessing();// 对分割结果进行后处理
-
-	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
-	// create_3d_gaussian_kernel已移至UnetInference类
-	// void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);
-	// argmax_spectrum已移至UnetPostprocessor类
-	// CImg<short> argmax_spectrum(const CImg<float>& input);
+	// 以下函数已移至相应的模块类：
+	// segModelInfer -> UnetPreprocessor::preprocessVolume + UnetInference::runSlidingWindow
+	// CTNormalization -> UnetPreprocessor::CTNormalization
+	// crop_to_nonzero -> UnetPreprocessor::cropToNonzero
+	// binary_fill_holes_3d -> UnetPreprocessor内部函数
+	// slidingWindowInfer -> UnetInference::runSlidingWindow
+	// argmax_spectrum -> UnetPostprocessor::argmaxSpectrum
 	
-	// 预处理步骤函数
-	CImg<short> crop_to_nonzero(const CImg<short>& input, CropBBox& bbox);
+	AI_INT   postProcessing();// 对分割结果进行后处理（已废弃）
 	
 	// 注意：save函数已移至UnetIO类作为静态方法
 	// 这些声明保留是为了兼容性，但实际实现已被移除

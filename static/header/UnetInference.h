@@ -19,9 +19,9 @@ public:
                                   const nnUNetConfig& config,
                                   const cimg_library::CImg<float>& input,
                                   cimg_library::CImg<float>& output,
-                                  Ort::Env& env,
-                                  Ort::SessionOptions& session_options,
-                                  bool use_gpu);
+                                  Ort::Session* session,
+                                  const std::string& input_name,
+                                  const std::string& output_name);
     
     // 创建3D高斯核 - 改为public以便访问
     static void createGaussianKernel(cimg_library::CImg<float>& kernel, 

@@ -12,100 +12,6 @@
 using namespace std;
 using namespace cimg_library;
 
-// 辅助函数：3D binary_fill_holes实现（匹配scipy.ndimage.binary_fill_holes）
-static void binary_fill_holes_3d(CImg<bool>& mask) {
-    // 使用flood fill从边界开始，标记所有外部背景
-    // 未被标记的背景即为内部孔洞
-    
-    int width = mask.width();
-    int height = mask.height();
-    int depth = mask.depth();
-    
-    // 创建visited标记
-    CImg<bool> visited(width, height, depth, 1, false);
-    std::queue<std::tuple<int, int, int>> queue;
-    
-    // 从所有边界的背景点开始flood fill
-    // X边界 (x=0 和 x=width-1)
-    for (int y = 0; y < height; y++) {
-        for (int z = 0; z < depth; z++) {
-            if (!mask(0, y, z) && !visited(0, y, z)) {
-                queue.push(std::make_tuple(0, y, z));
-                visited(0, y, z) = true;
-            }
-            if (!mask(width-1, y, z) && !visited(width-1, y, z)) {
-                queue.push(std::make_tuple(width-1, y, z));
-                visited(width-1, y, z) = true;
-            }
-        }
-    }
-    
-    // Y边界 (y=0 和 y=height-1)
-    for (int x = 0; x < width; x++) {
-        for (int z = 0; z < depth; z++) {
-            if (!mask(x, 0, z) && !visited(x, 0, z)) {
-                queue.push(std::make_tuple(x, 0, z));
-                visited(x, 0, z) = true;
-            }
-            if (!mask(x, height-1, z) && !visited(x, height-1, z)) {
-                queue.push(std::make_tuple(x, height-1, z));
-                visited(x, height-1, z) = true;
-            }
-        }
-    }
-    
-    // Z边界 (z=0 和 z=depth-1)
-    for (int x = 0; x < width; x++) {
-        for (int y = 0; y < height; y++) {
-            if (!mask(x, y, 0) && !visited(x, y, 0)) {
-                queue.push(std::make_tuple(x, y, 0));
-                visited(x, y, 0) = true;
-            }
-            if (!mask(x, y, depth-1) && !visited(x, y, depth-1)) {
-                queue.push(std::make_tuple(x, y, depth-1));
-                visited(x, y, depth-1) = true;
-            }
-        }
-    }
-    
-    // BFS找到所有连接到边界的背景点
-    while (!queue.empty()) {
-        auto [x, y, z] = queue.front();
-        queue.pop();
-        
-        // 检查6个邻居（3D中的6连通）
-        int dx[] = {-1, 1, 0, 0, 0, 0};
-        int dy[] = {0, 0, -1, 1, 0, 0};
-        int dz[] = {0, 0, 0, 0, -1, 1};
-        
-        for (int i = 0; i < 6; i++) {
-            int nx = x + dx[i];
-            int ny = y + dy[i];
-            int nz = z + dz[i];
-            
-            // 检查边界条件
-            if (nx >= 0 && nx < width && 
-                ny >= 0 && ny < height && 
-                nz >= 0 && nz < depth) {
-                // 如果是背景且未访问过
-                if (!mask(nx, ny, nz) && !visited(nx, ny, nz)) {
-                    queue.push(std::make_tuple(nx, ny, nz));
-                    visited(nx, ny, nz) = true;
-                }
-            }
-        }
-    }
-    
-    // 填充所有内部孔洞（未被访问的背景点）
-    int filled_count = 0;
-    cimg_forXYZ(mask, x, y, z) {
-        if (!mask(x, y, z) && !visited(x, y, z)) {
-            mask(x, y, z) = true;  // 填充孔洞
-            filled_count++;
-        }
-    }
-}
-
 // 主预处理函数 - 执行完整的预处理管道
 AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent, 
                                          nnUNetConfig& config, 
@@ -278,7 +184,7 @@ CImg<short> UnetPreprocessor::cropToNonzero(const CImg<short>& input, CropBBox& 
     
     // 应用binary_fill_holes（与Python的scipy.ndimage.binary_fill_holes一致）
     // 注意：目前暂时禁用以测试是否是fill hole导致的差异
-    // binary_fill_holes_3d(nonzero_mask);
+    // binaryFillHoles3d(nonzero_mask);
     
     // 重新计算bbox（基于填充后的mask）
     cimg_forXYZ(input, x, y, z) {
@@ -351,6 +257,100 @@ void UnetPreprocessor::CTNormalization(CImg<float>& input_volume, const nnUNetCo
     double std_hu = config.mean_std_HU[1];
     input_volume -= mean_hu;
     input_volume /= std_hu;
+}
+
+// 辅助函数：3D binary_fill_holes实现（匹配scipy.ndimage.binary_fill_holes）
+static void binaryFillHoles3d(CImg<bool>& mask) {
+    // 使用flood fill从边界开始，标记所有外部背景
+    // 未被标记的背景即为内部孔洞
+    
+    int width = mask.width();
+    int height = mask.height();
+    int depth = mask.depth();
+    
+    // 创建visited标记
+    CImg<bool> visited(width, height, depth, 1, false);
+    std::queue<std::tuple<int, int, int>> queue;
+    
+    // 从所有边界的背景点开始flood fill
+    // X边界 (x=0 和 x=width-1)
+    for (int y = 0; y < height; y++) {
+        for (int z = 0; z < depth; z++) {
+            if (!mask(0, y, z) && !visited(0, y, z)) {
+                queue.push(std::make_tuple(0, y, z));
+                visited(0, y, z) = true;
+            }
+            if (!mask(width-1, y, z) && !visited(width-1, y, z)) {
+                queue.push(std::make_tuple(width-1, y, z));
+                visited(width-1, y, z) = true;
+            }
+        }
+    }
+    
+    // Y边界 (y=0 和 y=height-1)
+    for (int x = 0; x < width; x++) {
+        for (int z = 0; z < depth; z++) {
+            if (!mask(x, 0, z) && !visited(x, 0, z)) {
+                queue.push(std::make_tuple(x, 0, z));
+                visited(x, 0, z) = true;
+            }
+            if (!mask(x, height-1, z) && !visited(x, height-1, z)) {
+                queue.push(std::make_tuple(x, height-1, z));
+                visited(x, height-1, z) = true;
+            }
+        }
+    }
+    
+    // Z边界 (z=0 和 z=depth-1)
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
+            if (!mask(x, y, 0) && !visited(x, y, 0)) {
+                queue.push(std::make_tuple(x, y, 0));
+                visited(x, y, 0) = true;
+            }
+            if (!mask(x, y, depth-1) && !visited(x, y, depth-1)) {
+                queue.push(std::make_tuple(x, y, depth-1));
+                visited(x, y, depth-1) = true;
+            }
+        }
+    }
+    
+    // BFS找到所有连接到边界的背景点
+    while (!queue.empty()) {
+        auto [x, y, z] = queue.front();
+        queue.pop();
+        
+        // 检查6个邻居（3D中的6连通）
+        int dx[] = {-1, 1, 0, 0, 0, 0};
+        int dy[] = {0, 0, -1, 1, 0, 0};
+        int dz[] = {0, 0, 0, 0, -1, 1};
+        
+        for (int i = 0; i < 6; i++) {
+            int nx = x + dx[i];
+            int ny = y + dy[i];
+            int nz = z + dz[i];
+            
+            // 检查边界条件
+            if (nx >= 0 && nx < width && 
+                ny >= 0 && ny < height && 
+                nz >= 0 && nz < depth) {
+                // 如果是背景且未访问过
+                if (!mask(nx, ny, nz) && !visited(nx, ny, nz)) {
+                    queue.push(std::make_tuple(nx, ny, nz));
+                    visited(nx, ny, nz) = true;
+                }
+            }
+        }
+    }
+    
+    // 填充所有内部孔洞（未被访问的背景点）
+    int filled_count = 0;
+    cimg_forXYZ(mask, x, y, z) {
+        if (!mask(x, y, z) && !visited(x, y, z)) {
+            mask(x, y, z) = true;  // 填充孔洞
+            filled_count++;
+        }
+    }
 }
 
 // Z-Score归一化

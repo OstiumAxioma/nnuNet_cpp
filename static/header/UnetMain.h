@@ -108,9 +108,6 @@ public:
 	AI_INT  performInference(AI_DataInfo *srcData); //执行分割推理
 
 	AI_INT  getSegMask(AI_DataInfo *dstData); //获取分割掩码
-
-	void    setDnnOptions(); //设置选项，是否使用cuda或opengl等扩展
-	void    setAlgParameter();
 	
 	// 设置输出路径
 	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
@@ -164,8 +161,12 @@ private:
 	Ort::SessionOptions session_options;
 
 	//segmentation sessions ptr
-	//std::unique_ptr<Ort::Session> semantic_seg_session_ptr;
-	//std::unique_ptr<Ort::Session> ian_seg_session_ptr;
+	std::unique_ptr<Ort::Session> semantic_seg_session_ptr;
+	
+	// Session相关的缓存信息
+	std::string cached_input_name;
+	std::string cached_output_name;
+	bool session_initialized;
 
 	//模型配置参数
 	nnUNetConfig unetConfig;
@@ -186,13 +187,16 @@ private:
 	//设置CBCT输入数据
 	AI_INT  setInput(AI_DataInfo *srcData); 
 
-	AI_INT  initializeOnnxruntimeInstances();
+	AI_INT  setOnnxruntimeInstances();
+	
+	// 初始化ONNX Session
+	AI_INT  initializeSession();
 
 	// 以下函数已移至相应的模块类：
 	// segModelInfer -> UnetPreprocessor::preprocessVolume + UnetInference::runSlidingWindow
 	// CTNormalization -> UnetPreprocessor::CTNormalization
 	// crop_to_nonzero -> UnetPreprocessor::cropToNonzero
-	// binary_fill_holes_3d -> UnetPreprocessor内部函数
+	// binaryFillHoles3d -> UnetPreprocessor内部函数
 	// slidingWindowInfer -> UnetInference::runSlidingWindow
 	// argmax_spectrum -> UnetPostprocessor::argmaxSpectrum
 	

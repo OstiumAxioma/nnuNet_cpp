@@ -14,39 +14,21 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                                       const nnUNetConfig& config,
                                       const CImg<float>& input,
                                       CImg<float>& output,
-                                      Ort::Env& env,
-                                      Ort::SessionOptions& session_options,
-                                      bool use_gpu)
+                                      Ort::Session* session,
+                                      const std::string& input_name,
+                                      const std::string& output_name)
 {
-    if (use_gpu) {
-        try {
-            OrtCUDAProviderOptions cuda_options;
-            cuda_options.device_id = 0;
-            session_options.AppendExecutionProvider_CUDA(cuda_options);
-        } catch (const Ort::Exception& e) {
-            // GPU不可用时继续使用CPU
-        }
-    }
-
-    // 创建会话
-    Ort::AllocatorWithDefaultOptions allocator;
-    
-    // 检查模型文件名
-    if (config.model_file_name == nullptr) {
+    // Session已经在外部初始化，直接使用
+    if (session == nullptr) {
+        std::cerr << "Error: Session pointer is null" << std::endl;
         return UnetSegAI_LOADING_FAIED;
     }
     
+    const char* input_name_cstr = input_name.c_str();
+    const char* output_name_cstr = output_name.c_str();
+    
     try {
-        Ort::Session session(env, config.model_file_name, session_options);
-        
-        // 获取输入输出名称
-        Ort::AllocatedStringPtr input_name_ptr = session.GetInputNameAllocated(0, allocator);
-        Ort::AllocatedStringPtr output_name_ptr = session.GetOutputNameAllocated(0, allocator);
-        
-        const char* input_name = input_name_ptr.get();
-        const char* output_name = output_name_ptr.get();
-
-        auto input_shape = session.GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+        auto input_shape = session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
 
         if (input_shape.size() != 5) {
             throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
@@ -203,8 +185,8 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                     }
 
                     // 执行单个patch推理
-                    AI_INT status = inferPatch(session, input_patch, win_pob, 
-                                              input_tensor_shape, input_name, output_name);
+                    AI_INT status = inferPatch(*session, input_patch, win_pob, 
+                                              input_tensor_shape, input_name_cstr, output_name_cstr);
                     if (status != UnetSegAI_STATUS_SUCCESS) {
                         return status;
                     }

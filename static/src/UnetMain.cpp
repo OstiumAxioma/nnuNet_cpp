@@ -17,6 +17,7 @@
 UnetMain::UnetMain()
 {
 	NETDEBUG_FLAG = true;
+	session_initialized = false;
 
 	env = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "nnUNetInference");
 	std::vector<std::string> providers = Ort::GetAvailableProviders();
@@ -82,6 +83,9 @@ void  UnetMain::setModelFns(const wchar_t* model_fn)
 	// 打印模型路径用于调试
 	
 	unetConfig.model_file_name = model_fn;
+	
+	// 初始化ONNX Runtime Session
+	initializeSession();
 }
 
 void  UnetMain::setStepSizeRatio(float ratio)
@@ -189,19 +193,6 @@ bool UnetMain::setConfigFromJsonString(const char* jsonContent)
 	return false;
 }
 
-
-void  UnetMain::setDnnOptions()
-{
-	//??????????????????????
-}
-
-
-void  UnetMain::setAlgParameter()
-{
-	//????????????????
-}
-
-
 void UnetMain::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath)
 {
 	if (preprocessPath != nullptr) {
@@ -226,8 +217,7 @@ void UnetMain::setOutputPaths(const wchar_t* preprocessPath, const wchar_t* mode
 	saveIntermediateResults = (preprocessPath != nullptr || modelOutputPath != nullptr || postprocessPath != nullptr);
 }
 
-
-AI_INT  UnetMain::initializeOnnxruntimeInstances()
+AI_INT  UnetMain::setOnnxruntimeInstances()
 {
 	
 	if (use_gpu) {
@@ -253,6 +243,67 @@ AI_INT  UnetMain::initializeOnnxruntimeInstances()
 	return UnetSegAI_STATUS_SUCCESS;
 }
 
+AI_INT UnetMain::initializeSession()
+{
+	// 如果已经初始化，先释放旧的Session
+	if (session_initialized) {
+		semantic_seg_session_ptr.reset();
+		session_initialized = false;
+	}
+	
+	// 检查模型文件路径
+	if (unetConfig.model_file_name == nullptr) {
+		std::cerr << "Error: Model file path not set" << std::endl;
+		return UnetSegAI_LOADING_FAIED;
+	}
+	
+	// 配置Session Options
+	if (use_gpu) {
+		try {
+			Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
+			std::cout << "Using CUDA execution provider" << std::endl;
+		} catch (const Ort::Exception& e) {
+			std::cout << "CUDA not available, falling back to CPU" << std::endl;
+			use_gpu = false;
+		}
+	}
+	
+	// 设置线程数
+	session_options.SetIntraOpNumThreads(1);
+	session_options.SetInterOpNumThreads(1);
+	
+	try {
+		// 创建Session
+		semantic_seg_session_ptr = std::make_unique<Ort::Session>(env, unetConfig.model_file_name, session_options);
+		
+		// 获取并缓存输入输出名称
+		Ort::AllocatorWithDefaultOptions allocator;
+		Ort::AllocatedStringPtr input_name_ptr = semantic_seg_session_ptr->GetInputNameAllocated(0, allocator);
+		Ort::AllocatedStringPtr output_name_ptr = semantic_seg_session_ptr->GetOutputNameAllocated(0, allocator);
+		
+		cached_input_name = std::string(input_name_ptr.get());
+		cached_output_name = std::string(output_name_ptr.get());
+		
+		// 验证模型输入形状
+		auto input_shape = semantic_seg_session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+		if (input_shape.size() != 5) {
+			std::cerr << "Error: Expected 5D input tensor, got " << input_shape.size() << "D" << std::endl;
+			semantic_seg_session_ptr.reset();
+			return UnetSegAI_LOADING_FAIED;
+		}
+		
+		std::cout << "Session initialized successfully" << std::endl;
+		std::cout << "Input name: " << cached_input_name << std::endl;
+		std::cout << "Output name: " << cached_output_name << std::endl;
+		
+		session_initialized = true;
+		return UnetSegAI_STATUS_SUCCESS;
+		
+	} catch (const Ort::Exception& e) {
+		std::cerr << "Failed to initialize ONNX Runtime session: " << e.what() << std::endl;
+		return UnetSegAI_LOADING_FAIED;
+	}
+}
 
 AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 {
@@ -335,6 +386,12 @@ AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 
 AI_INT  UnetMain::performInference(AI_DataInfo *srcData)
 {
+	// 检查Session是否已初始化
+	if (!session_initialized || !semantic_seg_session_ptr) {
+		std::cerr << "Error: ONNX Session not initialized. Please set model path first." << std::endl;
+		return UnetSegAI_LOADING_FAIED;
+	}
+	
 	int input_status = setInput(srcData);
 	if (input_status != UnetSegAI_STATUS_SUCCESS)
 		return input_status;
@@ -353,7 +410,8 @@ AI_INT  UnetMain::performInference(AI_DataInfo *srcData)
 	auto inference_start = std::chrono::steady_clock::now();
 	try {
 		AI_INT is_ok = UnetInference::runSlidingWindow(this, unetConfig, preprocessed_volume, 
-		                                              predicted_output_prob, env, session_options, use_gpu);
+		                                              predicted_output_prob, semantic_seg_session_ptr.get(),
+		                                              cached_input_name, cached_output_name);
 		if (is_ok != UnetSegAI_STATUS_SUCCESS) {
 			return is_ok;
 		}

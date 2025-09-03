@@ -173,6 +173,10 @@ private:
 	// JSON配置解析器
 	ConfigParser configParser;
 	
+	// 存储转置字符串（需要持久化存储）
+	std::string transposeForwardStr;
+	std::string transposeBackwardStr;
+	
 	// 输出路径设置
 	std::wstring preprocessOutputPath;
 	std::wstring modelOutputPath;

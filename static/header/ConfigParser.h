@@ -3,6 +3,9 @@
 #include <vector>
 #include <string>
 
+// Forward declaration
+struct nnUNetConfig;
+
 // JSON配置结构
 class ModelConfig {
 public:
@@ -34,6 +37,9 @@ public:
 
     bool parseJsonString(const std::string& jsonContent, ModelConfig& config);
     const ModelConfig& getConfig() const;
+    
+    // 静态方法：将ModelConfig应用到nnUNetConfig
+    static void applyConfigToUnet(const ModelConfig& modelConfig, nnUNetConfig& unetConfig);
 
 private:
     ModelConfig currentConfig;

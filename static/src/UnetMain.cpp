@@ -3,6 +3,7 @@
 #include "UnetPostprocessor.h"
 #include "UnetPreprocessor.h"
 #include "UnetIO.h"
+#include "ConfigParser.h"
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -83,7 +84,6 @@ void  UnetMain::setModelFns(const wchar_t* model_fn)
 	unetConfig.model_file_name = model_fn;
 }
 
-
 void  UnetMain::setStepSizeRatio(float ratio)
 {
 	if (ratio <= 1.f && ratio >= 0.f)
@@ -96,7 +96,6 @@ void  UnetMain::setStepSizeRatio(float ratio)
 	}
 }
 
-// 新增：参数设置接口实现
 void UnetMain::setPatchSize(int64_t x, int64_t y, int64_t z)
 {
 	unetConfig.patch_size = { x, y, z };
@@ -145,50 +144,37 @@ void UnetMain::setUseMirroring(bool use_mirroring)
 	unetConfig.use_mirroring = use_mirroring;
 }
 
-// 新增：JSON配置接口实现
 bool UnetMain::setConfigFromJsonString(const char* jsonContent)
 {
 	if (jsonContent == nullptr) {
 		return false;
 	}
-	
+	// 使用ConfigParser解析json配置
 	ModelConfig config;
 	if (configParser.parseJsonString(std::string(jsonContent), config)) {
-		// 应用配置到unetConfig
-		unetConfig.patch_size.clear();
-		if (config.patch_size.size() >= 3) {
-			unetConfig.patch_size.push_back(config.patch_size[0]);
-			unetConfig.patch_size.push_back(config.patch_size[1]);
-			unetConfig.patch_size.push_back(config.patch_size[2]);
+		// 使用ConfigParser的静态方法应用配置
+		ConfigParser::applyConfigToUnet(config, unetConfig);
+		
+		// 处理cimg_transpose字符串（这些需要持久存储）
+		std::string forward_str, backward_str;
+		for (size_t i = 0; i < config.transpose_forward.size(); i++) {
+			if (config.transpose_forward[i] == 0) forward_str += 'x';
+			else if (config.transpose_forward[i] == 1) forward_str += 'y';
+			else if (config.transpose_forward[i] == 2) forward_str += 'z';
+		}
+		for (size_t i = 0; i < config.transpose_backward.size(); i++) {
+			if (config.transpose_backward[i] == 0) backward_str += 'x';
+			else if (config.transpose_backward[i] == 1) backward_str += 'y';
+			else if (config.transpose_backward[i] == 2) backward_str += 'z';
 		}
 		
-		unetConfig.voxel_spacing.clear();
-		if (config.target_spacing.size() >= 3) {
-			unetConfig.voxel_spacing.push_back(config.target_spacing[0]);
-			unetConfig.voxel_spacing.push_back(config.target_spacing[1]);
-			unetConfig.voxel_spacing.push_back(config.target_spacing[2]);
-		}
+		// 保存转置字符串到成员变量中（需要添加成员变量）
+		transposeForwardStr = forward_str;
+		transposeBackwardStr = backward_str;
+		unetConfig.cimg_transpose_forward = transposeForwardStr.c_str();
+		unetConfig.cimg_transpose_backward = transposeBackwardStr.c_str();
 		
-		unetConfig.transpose_forward.clear();
-		if (config.transpose_forward.size() >= 3) {
-			unetConfig.transpose_forward.push_back(config.transpose_forward[0]);
-			unetConfig.transpose_forward.push_back(config.transpose_forward[1]);
-			unetConfig.transpose_forward.push_back(config.transpose_forward[2]);
-		}
-		
-		unetConfig.transpose_backward.clear();
-		if (config.transpose_backward.size() >= 3) {
-			unetConfig.transpose_backward.push_back(config.transpose_backward[0]);
-			unetConfig.transpose_backward.push_back(config.transpose_backward[1]);
-			unetConfig.transpose_backward.push_back(config.transpose_backward[2]);
-		}
-		
-		unetConfig.num_classes = config.num_classes;
-		unetConfig.input_channels = config.num_input_channels;
-		unetConfig.normalization_type = config.normalization_scheme;
-		unetConfig.use_mirroring = config.use_tta;
-		
-		// 设置intensity properties
+		// 设置额外的向量字段（这些在applyConfigToUnet中已经处理了，但需要确认）
 		unetConfig.mean_std_HU.clear();
 		unetConfig.mean_std_HU.push_back(config.mean);
 		unetConfig.mean_std_HU.push_back(config.std);
@@ -196,17 +182,6 @@ bool UnetMain::setConfigFromJsonString(const char* jsonContent)
 		unetConfig.min_max_HU.clear();
 		unetConfig.min_max_HU.push_back(config.min_val);
 		unetConfig.min_max_HU.push_back(config.max_val);
-		
-		// 添加直接访问的intensity properties到config（转换为double）
-		unetConfig.mean = static_cast<double>(config.mean);
-		unetConfig.std = static_cast<double>(config.std);
-		unetConfig.percentile_00_5 = static_cast<double>(config.percentile_00_5);
-		unetConfig.percentile_99_5 = static_cast<double>(config.percentile_99_5);
-		
-		// 添加归一化相关参数
-		unetConfig.use_mask_for_norm = config.use_mask_for_norm;
-		
-		// 调试输出确认配置
 		
 		return true;
 	}

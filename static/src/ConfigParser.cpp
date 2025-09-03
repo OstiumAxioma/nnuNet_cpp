@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "ConfigParser.h"
+#include "UnetMain.h"  // 需要包含以获取nnUNetConfig定义
 #include <algorithm>
 #include <sstream>
 #include <cctype>
@@ -251,4 +252,48 @@ bool ConfigParser::parseIntensityProperties(const std::string& jsonContent, Mode
         }
     }
     return false;
+}
+
+void ConfigParser::applyConfigToUnet(const ModelConfig& modelConfig, nnUNetConfig& unetConfig) {
+    // Apply basic parameters
+    unetConfig.num_classes = modelConfig.num_classes;
+    unetConfig.input_channels = modelConfig.num_input_channels;
+    
+    // Apply patch size
+    unetConfig.patch_size.clear();
+    for (int val : modelConfig.patch_size) {
+        unetConfig.patch_size.push_back(static_cast<int64_t>(val));
+    }
+    
+    // Apply target spacing
+    unetConfig.voxel_spacing = modelConfig.target_spacing;
+    
+    // Apply transpose settings
+    unetConfig.transpose_forward = modelConfig.transpose_forward;
+    unetConfig.transpose_backward = modelConfig.transpose_backward;
+    
+    // Build transpose strings for CImg
+    std::string forward_str, backward_str;
+    for (size_t i = 0; i < modelConfig.transpose_forward.size(); i++) {
+        if (modelConfig.transpose_forward[i] == 0) forward_str += 'x';
+        else if (modelConfig.transpose_forward[i] == 1) forward_str += 'y';
+        else if (modelConfig.transpose_forward[i] == 2) forward_str += 'z';
+    }
+    for (size_t i = 0; i < modelConfig.transpose_backward.size(); i++) {
+        if (modelConfig.transpose_backward[i] == 0) backward_str += 'x';
+        else if (modelConfig.transpose_backward[i] == 1) backward_str += 'y';
+        else if (modelConfig.transpose_backward[i] == 2) backward_str += 'z';
+    }
+    // Note: cimg_transpose_forward/backward are const char* and should be set elsewhere
+    
+    // Apply intensity properties with double precision
+    unetConfig.mean = static_cast<double>(modelConfig.mean);
+    unetConfig.std = static_cast<double>(modelConfig.std);
+    unetConfig.percentile_00_5 = static_cast<double>(modelConfig.percentile_00_5);
+    unetConfig.percentile_99_5 = static_cast<double>(modelConfig.percentile_99_5);
+    
+    // Apply normalization settings
+    unetConfig.normalization_type = modelConfig.normalization_scheme;
+    unetConfig.use_mask_for_norm = modelConfig.use_mask_for_norm;
+    unetConfig.use_mirroring = modelConfig.use_tta;
 }

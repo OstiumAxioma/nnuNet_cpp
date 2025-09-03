@@ -95,5 +95,8 @@
         "xtree": "cpp",
         "xutility": "cpp"
     },
-    "makefile.makefilePath": "D:\\Project\\nnuNet_cpp\\CMakeLists.txt"
+    "makefile.makefilePath": "D:\\Project\\nnuNet_cpp\\CMakeLists.txt",
+    "files.eol": "auto",
+    "files.insertFinalNewline": false,
+    "files.trimFinalNewlines": false
 }

@@ -116,6 +116,30 @@ int main()
     try {
         cout << "程序开始运行..." << endl;
         
+        // 环境检查
+        cout << "\n======= Environment Check =======" << endl;
+        cout << "Working directory: " << filesystem::current_path() << endl;
+        
+        // 检查关键目录是否存在
+        vector<string> checkDirs = {"..\\\\..\\\\..\\\\param", "..\\\\..\\\\..\\\\model", "..\\\\..\\\\..\\\\img"};
+        for (const auto& dir : checkDirs) {
+            if (filesystem::exists(dir)) {
+                cout << "✓ Directory exists: " << dir << endl;
+            } else {
+                cout << "✗ Directory missing: " << dir << endl;
+            }
+        }
+        
+        // 检查DLL是否存在
+        vector<string> checkDLLs = {"UnetOnnxSegDLL.dll", "onnxruntime.dll", "onnxruntime_providers_cuda.dll"};
+        for (const auto& dll : checkDLLs) {
+            if (filesystem::exists(dll)) {
+                cout << "✓ DLL found: " << dll << endl;
+            } else {
+                cout << "✗ DLL missing: " << dll << endl;
+            }
+        }
+        
         //===== 用户选择配置文件 =====
         cout << "\n======= Config File Selection =======" << endl;
         vector<string> configExtensions = {".json"};
@@ -217,36 +241,63 @@ int main()
 
         //===== 初始化分割模型 =====
         cout << "\n======= Initializing Model =======" << endl;
+        cout << "Step 1: Creating model object..." << endl;
         AI_HANDLE AI_Hdl = UnetSegAI_CreateObj();
         if (AI_Hdl == NULL) {
-            cout << "Model initialization failed!" << endl;
+            cout << "ERROR: UnetSegAI_CreateObj() returned NULL!" << endl;
+            cout << "This indicates model object creation failed." << endl;
             free(srcData);
+            system("pause");
             return -1;
         }
+        cout << "Model object created successfully." << endl;
         
         // 配置模型参数
+        cout << "Step 2: Loading JSON configuration..." << endl;
+        cout << "JSON content length: " << jsonContent.length() << " characters" << endl;
         AI_INT config_status = UnetSegAI_SetConfigFromJson(AI_Hdl, jsonContent.c_str());
         if (config_status != UnetSegAI_STATUS_SUCCESS) {
-            cout << "Failed to set configuration!" << endl;
+            cout << "ERROR: UnetSegAI_SetConfigFromJson() failed!" << endl;
+            cout << "Status code: " << config_status << endl;
+            cout << "JSON config path: " << configPath << endl;
             UnetSegAI_ReleseObj(AI_Hdl);
             free(srcData);
+            system("pause");
             return -1;
         }
+        cout << "JSON configuration loaded successfully." << endl;
         
         // 设置模型路径
+        cout << "Step 3: Setting model path..." << endl;
+        cout << "Model path: " << modelPath << endl;
         wstring wModelPath(modelPath.begin(), modelPath.end());
         AI_INT status1 = UnetSegAI_SetModelPath(AI_Hdl, const_cast<wchar_t*>(wModelPath.c_str()));
         if (status1 != UnetSegAI_STATUS_SUCCESS) {
-            cout << "Failed to set model path!" << endl;
+            cout << "ERROR: UnetSegAI_SetModelPath() failed!" << endl;
+            cout << "Status code: " << status1 << endl;
+            cout << "Model path: " << modelPath << endl;
+            
+            // 检查模型文件是否存在
+            if (!filesystem::exists(modelPath)) {
+                cout << "Model file does not exist!" << endl;
+            } else {
+                cout << "Model file exists but failed to load." << endl;
+            }
+            
             UnetSegAI_ReleseObj(AI_Hdl);
             free(srcData);
+            system("pause");
             return -1;
         }
+        cout << "Model path set successfully." << endl;
         
         // 设置TileStepRatio
+        cout << "Step 4: Setting tile step ratio..." << endl;
         UnetSegAI_SetTileStepRatio(AI_Hdl, 0.5f);
+        cout << "Tile step ratio set to 0.5" << endl;
         
         // 设置中间结果输出路径
+        cout << "Step 5: Setting output paths..." << endl;
         wstring preprocessPath = L"..\\..\\..\\result\\preprocess";
         wstring modelOutputPath = L"..\\..\\..\\result\\model_output";
         wstring postprocessPath = L"..\\..\\..\\result\\postprocess";
@@ -255,6 +306,8 @@ int main()
             const_cast<wchar_t*>(preprocessPath.c_str()),
             const_cast<wchar_t*>(modelOutputPath.c_str()),
             const_cast<wchar_t*>(postprocessPath.c_str()));
+        cout << "Output paths set successfully." << endl;
+        cout << "Model initialization completed!" << endl;
         
         //===== 执行分割推理 =====
         cout << "\n======= Running Inference =======" << endl;

@@ -200,10 +200,8 @@ private:
 	// 预处理步骤函数
 	CImg<short> crop_to_nonzero(const CImg<short>& input, CropBBox& bbox);
 	
-	// 保存中间结果文件的方法
-	void    savePreprocessedData(const CImg<float>& data, const std::wstring& filename);
-	void    saveModelOutput(const CImg<float>& data, const std::wstring& filename);
-	void    savePostprocessedData(const CImg<short>& data, const std::wstring& filename);
-	void    saveTile(const CImg<float>& tile, int tileIndex, int x, int y, int z);
+	// 注意：save函数已移至UnetIO类作为静态方法
+	// 这些声明保留是为了兼容性，但实际实现已被移除
+	// 新代码应该直接使用 UnetIO::saveXXX 函数
 };
 #endif //_UnetMain__H

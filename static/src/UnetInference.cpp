@@ -1,5 +1,6 @@
 #include "UnetInference.h"
 #include "UnetMain.h"
+#include "UnetIO.h"
 #include "UnetSegAI_API.h"
 #include <iostream>
 #include <cmath>
@@ -209,8 +210,8 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                     }
 
                     // 保存单个tile（如果启用了中间结果保存）
-                    if (parent && parent->saveIntermediateResults) {
-                        parent->saveTile(win_pob, patch_count, lb_x, lb_y, lb_z);
+                    if (parent && parent->saveIntermediateResults && !parent->modelOutputPath.empty()) {
+                        UnetIO::saveTile(win_pob, patch_count, lb_x, lb_y, lb_z, parent->modelOutputPath);
                     }
 
                     // 累加结果到输出概率体

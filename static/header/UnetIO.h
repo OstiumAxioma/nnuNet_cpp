@@ -5,6 +5,11 @@
 #include <string>
 #include "CImg.h"
 
+// ITK headers for image I/O
+#include <itkImage.h>
+#include <itkImageFileWriter.h>
+#include <itkImageRegionIterator.h>
+
 // Forward declarations
 class UnetMain;
 

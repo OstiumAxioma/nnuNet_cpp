@@ -1,4 +1,5 @@
 #include "UnetPostprocessor.h"
+#include "UnetIO.h"
 #include "UnetSegAI_API.h"
 #include <iostream>
 #include <cstring>
@@ -18,8 +19,18 @@ AI_INT UnetPostprocessor::processSegmentationMask(UnetMain* parent,
     CImg<short> output_seg_mask = argmaxSpectrum(prob_volume);
     
     // 保存后处理数据（在转置撤销前）
-    if (parent && parent->saveIntermediateResults) {
-        parent->savePostprocessedData(output_seg_mask, L"postprocessed_segmentation_mask_before_transpose");
+    if (parent && parent->saveIntermediateResults && !parent->postprocessOutputPath.empty()) {
+        // 创建UnetIO需要的ImageMetadata类型
+        ::ImageMetadata metadata;
+        metadata.origin[0] = parent->imageMetadata.origin[0];
+        metadata.origin[1] = parent->imageMetadata.origin[1];
+        metadata.origin[2] = parent->imageMetadata.origin[2];
+        metadata.spacing[0] = parent->imageMetadata.spacing[0];
+        metadata.spacing[1] = parent->imageMetadata.spacing[1];
+        metadata.spacing[2] = parent->imageMetadata.spacing[2];
+        UnetIO::savePostprocessedData(output_seg_mask, parent->postprocessOutputPath, 
+                                      L"postprocessed_segmentation_mask_before_transpose", 
+                                      metadata);
     }
     
     // 步骤2：撤销转置（恢复到原始坐标系）
@@ -55,12 +66,22 @@ AI_INT UnetPostprocessor::processSegmentationMask(UnetMain* parent,
     dstData->VoxelSpacingZ = parent->imageMetadata.spacing[2];
     
     // 保存最终的后处理结果
-    if (parent && parent->saveIntermediateResults) {
+    if (parent && parent->saveIntermediateResults && !parent->postprocessOutputPath.empty()) {
         // 需要从dstData创建一个CImg对象来保存
         CImg<short> final_result(dstData->Width, dstData->Height, dstData->Depth, 1);
         std::memcpy(final_result.data(), dstData->ptr_Data, 
                    dstData->Width * dstData->Height * dstData->Depth * sizeof(short));
-        parent->savePostprocessedData(final_result, L"postprocessed_segmentation_mask_final");
+        // 创建UnetIO需要的ImageMetadata类型
+        ::ImageMetadata metadata;
+        metadata.origin[0] = parent->imageMetadata.origin[0];
+        metadata.origin[1] = parent->imageMetadata.origin[1];
+        metadata.origin[2] = parent->imageMetadata.origin[2];
+        metadata.spacing[0] = parent->imageMetadata.spacing[0];
+        metadata.spacing[1] = parent->imageMetadata.spacing[1];
+        metadata.spacing[2] = parent->imageMetadata.spacing[2];
+        UnetIO::savePostprocessedData(final_result, parent->postprocessOutputPath, 
+                                      L"postprocessed_segmentation_mask_final", 
+                                      metadata);
         std::cout << "  Post-processed result saved to: result/postprocess/" << endl;
     }
 

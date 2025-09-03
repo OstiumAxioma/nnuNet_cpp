@@ -194,7 +194,8 @@ private:
 	void    CTNormalization(CImg<float>& input_volume, nnUNetConfig config);
 	// create_3d_gaussian_kernel已移至UnetInference类
 	// void    create_3d_gaussian_kernel(CImg<float>& gaussisan_weight, const std::vector<int64_t>& patch_sizes);
-	CImg<short> argmax_spectrum(const CImg<float>& input);
+	// argmax_spectrum已移至UnetPostprocessor类
+	// CImg<short> argmax_spectrum(const CImg<float>& input);
 	
 	// 预处理步骤函数
 	CImg<short> crop_to_nonzero(const CImg<short>& input, CropBBox& bbox);

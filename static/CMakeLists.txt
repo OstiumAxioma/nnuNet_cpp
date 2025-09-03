@@ -50,6 +50,12 @@ set(HEADERS
 # 创建DLL库
 add_library(UnetOnnxSegDLL SHARED ${SOURCES} ${HEADERS})
 
+# 强制每次都重新生成导入库
+set_target_properties(UnetOnnxSegDLL PROPERTIES
+    LINK_FLAGS "/INCREMENTAL:NO"  # 禁用增量链接
+    LINK_DEPENDS_NO_SHARED ON     # 不共享链接依赖
+)
+
 # 启用预编译头
 target_precompile_headers(UnetOnnxSegDLL PRIVATE header/pch.h)
 

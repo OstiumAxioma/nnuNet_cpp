@@ -10,9 +10,25 @@ echo.
 if not exist build mkdir build
 cd build
 
-:: 清理之前的CMake缓存
+:: 完全清理之前的构建（强制重新生成所有文件）
+echo Cleaning previous build completely...
 if exist CMakeCache.txt del CMakeCache.txt
 if exist CMakeFiles rmdir /s /q CMakeFiles
+if exist *.vcxproj del /q *.vcxproj
+if exist *.vcxproj.filters del /q *.vcxproj.filters
+if exist *.sln del /q *.sln
+if exist x64 rmdir /s /q x64
+if exist Release rmdir /s /q Release
+if exist Debug rmdir /s /q Debug
+if exist bin rmdir /s /q bin
+if exist lib rmdir /s /q lib
+
+:: 清理Visual Studio和CMake的中间文件
+if exist UnetOnnxSegDLL.dir rmdir /s /q UnetOnnxSegDLL.dir
+if exist *.exp del /q *.exp
+if exist *.ilk del /q *.ilk
+if exist *.pdb del /q *.pdb
+if exist .vs rmdir /s /q .vs
 
 :: 配置项目
 echo Configuring UnetOnnxSegDLL project...

@@ -3,27 +3,27 @@
 
 
 // ////////////////////////////////////////////////////////////////////////////
-// �ļ���UnetSegAI_API.h
-// ���ߣ���ά
-// ˵�������� ��ǻCBCT�ṹ�ָ� �ӿ�
+// File: UnetSegAI_API.h
+// Author: ZhangWei
+// Description: Medical Image Segmentation API Interface
 //
-// �������ڣ�2025-4-30
+// Create Date: 2025-4-30
 
 // ////////////////////////////////////////////////////////////////////////////
 
 #define UnetSegAI_API  extern "C" __declspec(dllexport)
 
 
-#define UnetSegAI_STATUS_SUCCESS          0   // �ɹ�
-#define UnetSegAI_STATUS_HANDLE_NULL      1   // �վ���������ȵ��� UnetSegAI_CreateObj() �����������
-#define UnetSegAI_STATUS_VOLUME_SMALL     2   // ���������ݹ�С
-#define UnetSegAI_STATUS_VOLUME_LARGE     3   // ���������ݹ���
-#define UnetSegAI_STATUS_CROP_FAIED       4   // ��λ��������ʧ��
-#define UnetSegAI_STATUS_FAIED            5   // �ָ�����ʧ��
-#define UnetSegAI_LOADING_FAIED           6   // ����AIģ������ʧ��
+#define UnetSegAI_STATUS_SUCCESS          0   // Success
+#define UnetSegAI_STATUS_HANDLE_NULL      1   // Handle is NULL, please call UnetSegAI_CreateObj() first
+#define UnetSegAI_STATUS_VOLUME_SMALL     2   // Input volume too small
+#define UnetSegAI_STATUS_VOLUME_LARGE     3   // Input volume too large
+#define UnetSegAI_STATUS_CROP_FAIED       4   // ROI detection failed
+#define UnetSegAI_STATUS_FAIED            5   // Segmentation failed
+#define UnetSegAI_LOADING_FAIED           6   // Failed to load AI model
 
 // --------------------------------------------------------------------
-//            Ԥ��������
+//            Type Definitions
 // --------------------------------------------------------------------
 typedef unsigned char    AI_UCHAR;
 typedef unsigned short   AI_USHORT;
@@ -36,58 +36,58 @@ typedef wchar_t*         AI_STRING;
 typedef int              AI_BOOL;
 
 
-//�����ݽṹ
+// Data structure for input/output volumes
 typedef struct
 {
-	AI_SHORT    *ptr_Data;      // ����ָ��
-	AI_INT       Width;         // ������
-	AI_INT       Height;        // ������
-	AI_INT       Depth;         // �������
-	AI_FLOAT     VoxelSpacing;  // ���ش�С����λ��mm
-	AI_FLOAT     VoxelSpacingX;  // ���ش�С����λ��mm
-	AI_FLOAT     VoxelSpacingY;  // ���ش�С����λ��mm
-	AI_FLOAT     VoxelSpacingZ;  // ���ش�С����λ��mm
-	// ���ӣ�ԭʼspacing�ֶΣ����ļ���ȡ����ʵ����spacing��
-	AI_FLOAT     OriginalVoxelSpacingX;  // ԭʼ���ش�С����λ��mm
-	AI_FLOAT     OriginalVoxelSpacingY;  // ԭʼ���ش�С����λ��mm
-	AI_FLOAT     OriginalVoxelSpacingZ;  // ԭʼ���ش�С����λ��mm
-	// ���ӣ�origin�ֶΣ��������ҽѧͼ���ѧԭ��
-	AI_FLOAT     OriginX;  // ԭ��X����
-	AI_FLOAT     OriginY;  // ԭ��Y����
-	AI_FLOAT     OriginZ;  // ԭ��Z����
+	AI_SHORT    *ptr_Data;      // Data pointer
+	AI_INT       Width;         // Image width
+	AI_INT       Height;        // Image height
+	AI_INT       Depth;         // Image depth (number of slices)
+	AI_FLOAT     VoxelSpacing;  // Voxel size (unit: mm) - deprecated, use VoxelSpacingX/Y/Z
+	AI_FLOAT     VoxelSpacingX;  // Voxel spacing in X direction (unit: mm)
+	AI_FLOAT     VoxelSpacingY;  // Voxel spacing in Y direction (unit: mm)
+	AI_FLOAT     VoxelSpacingZ;  // Voxel spacing in Z direction (unit: mm)
+	// Original spacing fields (before any resampling)
+	// If not set or invalid, the library will use current spacing as original
+	AI_FLOAT     OriginalVoxelSpacingX;  // Original voxel spacing in X (unit: mm)
+	AI_FLOAT     OriginalVoxelSpacingY;  // Original voxel spacing in Y (unit: mm)
+	AI_FLOAT     OriginalVoxelSpacingZ;  // Original voxel spacing in Z (unit: mm)
+	// Origin fields for medical image geometry
+	AI_FLOAT     OriginX;  // Origin X coordinate
+	AI_FLOAT     OriginY;  // Origin Y coordinate
+	AI_FLOAT     OriginZ;  // Origin Z coordinate
 } AI_DataInfo;
 
 
-// �������
-// ���г�ʼ������ȡ�㷨��Ҫ�Ĳ�����ģ�壩
-// ��ʼ��ʧ�ܣ�����NULL���ǿձ�ʾ��ʼ���ɹ�
+// Create segmentation object
+// Initialize the algorithm and required parameters (model, etc.)
+// Returns NULL on failure, non-NULL handle on success
 UnetSegAI_API AI_HANDLE    UnetSegAI_CreateObj();
 
-//���÷ָ�ģ���ļ�·��
+// Set segmentation model file path
 UnetSegAI_API AI_INT       UnetSegAI_SetModelPath(AI_HANDLE AI_Hdl, AI_STRING fn);
 
-//���û�������������
+// Set sliding window overlap ratio (0-1, e.g., 0.5 = 50% overlap)
 UnetSegAI_API AI_INT       UnetSegAI_SetTileStepRatio(AI_HANDLE AI_Hdl, AI_FLOAT ratio);
 
-// �ָ��ǻCBCT��CPU�����Լ1���ӣ�
-// AI_Hdl: ��ʼ�������ľ����
-// srcData: �����ǻCBCTͼ������
+// Run segmentation inference on medical image volume
+// AI_Hdl: Handle created by UnetSegAI_CreateObj()
+// srcData: Input medical image data
 UnetSegAI_API AI_INT       UnetSegAI_Infer(AI_HANDLE AI_Hdl, AI_DataInfo *srcData);
 
-// ��ȡ�ָ���
-// AI_Hdl: ��ʼ�������ľ����
-//�ָ�Mask��ǩ˵����
-//1�����ǣ�2�����ǣ�3�����񼣻4������񾭹ܣ�5��������6�������� 0������
-//UnetSegAI_API AI_INT       UnetSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData, AI_INT &totalToothNumber, AI_INT &upperToothNumber, AI_INT &lowerToothNumber);
+// Get segmentation result
+// AI_Hdl: Handle created by UnetSegAI_CreateObj()
+// dstData: Output segmentation mask
+// Label values depend on the model configuration
 UnetSegAI_API AI_INT       UnetSegAI_GetResult(AI_HANDLE AI_Hdl, AI_DataInfo *dstData);
 
-// ���ӣ��趨������·������Ҫ���������������ļ���
+// Optional: Set output paths for intermediate results (for debugging)
 UnetSegAI_API AI_INT       UnetSegAI_SetOutputPaths(AI_HANDLE AI_Hdl, 
                                                                  AI_STRING preprocessPath, 
                                                                  AI_STRING modelOutputPath, 
                                                                  AI_STRING postprocessPath);
 
-// ���Ӳ���������ؽӿ�
+// Additional configuration interfaces
 UnetSegAI_API AI_INT       UnetSegAI_SetPatchSize(AI_HANDLE AI_Hdl, AI_INT x, AI_INT y, AI_INT z);
 UnetSegAI_API AI_INT       UnetSegAI_SetNumClasses(AI_HANDLE AI_Hdl, AI_INT classes);
 UnetSegAI_API AI_INT       UnetSegAI_SetInputChannels(AI_HANDLE AI_Hdl, AI_INT channels);
@@ -102,10 +102,10 @@ UnetSegAI_API AI_INT       UnetSegAI_SetIntensityProperties(AI_HANDLE AI_Hdl,
                                                                          AI_FLOAT percentile_00_5, AI_FLOAT percentile_99_5);
 UnetSegAI_API AI_INT       UnetSegAI_SetUseMirroring(AI_HANDLE AI_Hdl, AI_BOOL use_mirroring);
 
-// ���ӣ�JSON�����ӿ�
+// Load configuration from JSON string
 UnetSegAI_API AI_INT       UnetSegAI_SetConfigFromJson(AI_HANDLE AI_Hdl, const char* jsonContent);
 
-// �ͷ���Դ
+// Release resources and free memory
 UnetSegAI_API AI_VOID      UnetSegAI_ReleseObj(AI_HANDLE AI_Hdl);
 
 #endif

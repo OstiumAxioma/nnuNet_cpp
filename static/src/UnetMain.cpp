@@ -13,6 +13,7 @@
 #include <queue>
 #include <tuple>
 #include <chrono>
+#include <cmath>
 
 UnetMain::UnetMain()
 {
@@ -57,6 +58,12 @@ UnetMain::UnetMain()
 	
 	// 初始化输出路径
 	saveIntermediateResults = false;
+	
+	// 初始化spacing向量，避免未初始化的访问
+	input_voxel_spacing = { 1.0f, 1.0f, 1.0f };
+	original_voxel_spacing = { 1.0f, 1.0f, 1.0f };
+	transposed_input_voxel_spacing = { 1.0f, 1.0f, 1.0f };
+	transposed_original_voxel_spacing = { 1.0f, 1.0f, 1.0f };
 }
 
 
@@ -366,14 +373,68 @@ AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 	// 移除统计计算 - 将在预处理管道中的正确位置计算
 	// intensity_mean和intensity_std将在crop后计算，或使用JSON配置中的值
 
+	// 清空并重新初始化spacing向量，确保大小正确
+	input_voxel_spacing.clear();
 	input_voxel_spacing = { voxelSpacingX, voxelSpacingY, voxelSpacingZ }; // x Image width, y Image height, z Image depth
 	
-	// 读取原始spacing（如果提供了的话）
-	if (srcData->OriginalVoxelSpacingX > 0 && srcData->OriginalVoxelSpacingY > 0 && srcData->OriginalVoxelSpacingZ > 0) {
+	// 读取原始spacing - 增强的防御性检查
+	original_voxel_spacing.clear();
+	
+	// 检查OriginalVoxelSpacing是否为合理值
+	// 考虑未初始化内存可能包含的值：负数、零、极大值、NaN等
+	bool originalSpacingValid = true;
+	
+	// 检查是否为合理的医学图像spacing范围 (0.01mm - 10mm)
+	const float MIN_VALID_SPACING = 0.01f;
+	const float MAX_VALID_SPACING = 10.0f;
+	
+	if (srcData->OriginalVoxelSpacingX <= MIN_VALID_SPACING || 
+	    srcData->OriginalVoxelSpacingX >= MAX_VALID_SPACING ||
+	    srcData->OriginalVoxelSpacingY <= MIN_VALID_SPACING || 
+	    srcData->OriginalVoxelSpacingY >= MAX_VALID_SPACING ||
+	    srcData->OriginalVoxelSpacingZ <= MIN_VALID_SPACING || 
+	    srcData->OriginalVoxelSpacingZ >= MAX_VALID_SPACING) {
+		originalSpacingValid = false;
+	}
+	
+	// 检查是否为NaN或无穷大
+	if (!std::isfinite(srcData->OriginalVoxelSpacingX) ||
+	    !std::isfinite(srcData->OriginalVoxelSpacingY) ||
+	    !std::isfinite(srcData->OriginalVoxelSpacingZ)) {
+		originalSpacingValid = false;
+	}
+	
+	// 检查是否与input_voxel_spacing相差太大（可能是垃圾值）
+	if (originalSpacingValid) {
+		float ratioX = srcData->OriginalVoxelSpacingX / voxelSpacingX;
+		float ratioY = srcData->OriginalVoxelSpacingY / voxelSpacingY;
+		float ratioZ = srcData->OriginalVoxelSpacingZ / voxelSpacingZ;
+		
+		// 如果比例相差超过100倍，很可能是垃圾值
+		if (ratioX < 0.01f || ratioX > 100.0f ||
+		    ratioY < 0.01f || ratioY > 100.0f ||
+		    ratioZ < 0.01f || ratioZ > 100.0f) {
+			originalSpacingValid = false;
+			std::cout << "Warning: OriginalVoxelSpacing seems invalid (ratio check failed). Using current spacing as original." << std::endl;
+		}
+	}
+	
+	if (originalSpacingValid) {
+		// 使用提供的原始spacing
 		original_voxel_spacing = { srcData->OriginalVoxelSpacingX, srcData->OriginalVoxelSpacingY, srcData->OriginalVoxelSpacingZ };
+		std::cout << "Using provided OriginalVoxelSpacing: " << srcData->OriginalVoxelSpacingX 
+		          << " x " << srcData->OriginalVoxelSpacingY 
+		          << " x " << srcData->OriginalVoxelSpacingZ << " mm" << std::endl;
 	} else {
-		// 如果没有提供原始spacing，则使用当前spacing作为原始spacing
+		// 如果原始spacing无效或未提供，使用当前spacing作为原始spacing
 		original_voxel_spacing = input_voxel_spacing;
+		std::cout << "Note: OriginalVoxelSpacing not provided or invalid. Using current spacing as original." << std::endl;
+	}
+	
+	// 确保spacing向量大小为3
+	if (input_voxel_spacing.size() != 3 || original_voxel_spacing.size() != 3) {
+		std::cerr << "Error: Failed to initialize spacing vectors properly" << std::endl;
+		return UnetSegAI_STATUS_FAIED;
 	}
 
 	// 统计信息将在预处理流水线中计算

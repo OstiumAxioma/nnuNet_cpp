@@ -21,16 +21,38 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
     std::cout << "\n======= Preprocessing Stage =======" << std::endl;
     auto preprocess_start = std::chrono::steady_clock::now();
 
+    // 验证transpose_forward索引的有效性
+    for (int i = 0; i < 3; ++i) {
+        if (config.transpose_forward[i] < 0 || config.transpose_forward[i] >= 3) {
+            std::cerr << "Error: Invalid transpose_forward index: " << config.transpose_forward[i] << std::endl;
+            return UnetSegAI_STATUS_FAIED;
+        }
+    }
+    
+    // 验证spacing向量的大小
+    if (parent->input_voxel_spacing.size() != 3 || parent->original_voxel_spacing.size() != 3) {
+        std::cerr << "Error: Spacing vectors not properly initialized" << std::endl;
+        std::cerr << "  input_voxel_spacing size: " << parent->input_voxel_spacing.size() << std::endl;
+        std::cerr << "  original_voxel_spacing size: " << parent->original_voxel_spacing.size() << std::endl;
+        return UnetSegAI_STATUS_FAIED;
+    }
+
     // 步骤1：转置
     input_volume.permute_axes(config.cimg_transpose_forward);
     
-    // 更新转置后的spacing
-    parent->transposed_input_voxel_spacing.clear();
-    parent->transposed_original_voxel_spacing.clear();
+    // 更新转置后的spacing（使用临时变量避免部分更新）
+    std::vector<float> temp_transposed_input(3);
+    std::vector<float> temp_transposed_original(3);
+    
     for (int i = 0; i < 3; ++i) {
-        parent->transposed_input_voxel_spacing.push_back(parent->input_voxel_spacing[config.transpose_forward[i]]);
-        parent->transposed_original_voxel_spacing.push_back(parent->original_voxel_spacing[config.transpose_forward[i]]);
+        int idx = config.transpose_forward[i];
+        temp_transposed_input[i] = parent->input_voxel_spacing[idx];
+        temp_transposed_original[i] = parent->original_voxel_spacing[idx];
     }
+    
+    // 原子性更新
+    parent->transposed_input_voxel_spacing = temp_transposed_input;
+    parent->transposed_original_voxel_spacing = temp_transposed_original;
     
     // 步骤2：裁剪到非零区域
     CImg<short> cropped_volume = cropToNonzero(input_volume, parent->crop_bbox, parent->seg_mask);

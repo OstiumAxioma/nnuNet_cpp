@@ -17,6 +17,29 @@ set(ITK_DIR "D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4")
 find_package(ITK REQUIRED)
 include(${ITK_USE_FILE})
 
+# 设置LibTorch目录（手动配置，因为缺少CMake配置文件）
+set(TORCH_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch231")
+set(TORCH_INCLUDE_DIRS "${TORCH_PATH}/include" "${TORCH_PATH}/include/torch/csrc/api/include")
+
+# LibTorch库文件
+set(TORCH_LIBRARIES
+    "${TORCH_PATH}/lib/torch.lib"
+    "${TORCH_PATH}/lib/torch_cpu.lib"
+    "${TORCH_PATH}/lib/c10.lib"
+)
+
+# 如果需要CUDA支持
+if(USE_CUDA)
+    list(APPEND TORCH_LIBRARIES
+        "${TORCH_PATH}/lib/torch_cuda.lib"
+        "${TORCH_PATH}/lib/c10_cuda.lib"
+        "${TORCH_PATH}/lib/caffe2_nvrtc.lib"
+    )
+endif()
+
+# 设置C++17标准（LibTorch需要）
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+
 # 设置输出目录
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -28,6 +51,7 @@ set(SOURCES
     src/UnetMain.cpp
     src/UnetPreprocessor.cpp
     src/UnetInference.cpp
+    src/UnetTorchInference.cpp
     src/UnetPostprocessor.cpp
     src/UnetIO.cpp
     src/ConfigParser.cpp
@@ -40,6 +64,7 @@ set(HEADERS
     header/UnetMain.h
     header/UnetPreprocessor.h
     header/UnetInference.h
+    header/UnetTorchInference.h
     header/UnetPostprocessor.h
     header/UnetIO.h
     header/ConfigParser.h
@@ -64,6 +89,7 @@ target_include_directories(UnetOnnxSegDLL PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/header
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/onnxruntime/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/CImg
+    ${TORCH_INCLUDE_DIRS}
 )
 
 # 查找并链接库文件
@@ -87,6 +113,7 @@ target_link_libraries(UnetOnnxSegDLL PRIVATE
     ${ONNXRUNTIME_PROVIDERS_SHARED_LIB}
     ${ONNXRUNTIME_PROVIDERS_CUDA_LIB}
     ${ITK_LIBRARIES}
+    ${TORCH_LIBRARIES}
 )
 
 # Windows特定设置

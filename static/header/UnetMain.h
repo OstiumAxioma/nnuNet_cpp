@@ -9,6 +9,7 @@
 #include <math.h>
 #include <map>
 #include "onnxruntime_cxx_api.h"
+#include <torch/script.h>
 
 #define cimg_display_type 2
 #include "CImg.h"
@@ -77,6 +78,7 @@ class UnetMain
 	// 声明友元类以访问私有成员
 	friend class UnetPreprocessor;
 	friend class UnetInference;
+	friend class UnetTorchInference;
 	friend class UnetPostprocessor;
 	friend class UnetIO;
 
@@ -113,9 +115,23 @@ public:
 	void    setOutputPaths(const wchar_t* preprocessPath, const wchar_t* modelOutputPath, const wchar_t* postprocessPath);
 
 private:
+	// 模型后端类型
+	enum class ModelBackend {
+		ONNX,
+		TORCH,
+		UNKNOWN
+	};
+	
 	bool   NETDEBUG_FLAG;
 	bool   use_gpu;
 	Ort::Env env;
+	
+	// 模型后端相关
+	ModelBackend model_backend = ModelBackend::UNKNOWN;
+	
+	// TorchScript 模型相关
+	torch::jit::script::Module torch_model;
+	bool torch_model_loaded = false;
 
 	//输入：原始CBCT体数据
 	CImg<short> input_cbct_volume;
@@ -191,6 +207,13 @@ private:
 	
 	// 初始化ONNX Session
 	AI_INT  initializeSession();
+	
+	// 初始化 TorchScript 模型
+	AI_INT  initializeTorchModel();
+	
+	// 辅助函数
+	ModelBackend detectModelBackend(const wchar_t* model_path);
+	std::string wstringToString(const std::wstring& wstr);
 
 	// 以下函数已移至相应的模块类：
 	// segModelInfer -> UnetPreprocessor::preprocessVolume + UnetInference::runSlidingWindow

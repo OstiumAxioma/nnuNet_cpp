@@ -1,5 +1,6 @@
 #include "UnetMain.h"
 #include "UnetInference.h"
+#include "UnetTorchInference.h"
 #include "UnetPostprocessor.h"
 #include "UnetPreprocessor.h"
 #include "UnetIO.h"
@@ -14,6 +15,7 @@
 #include <tuple>
 #include <chrono>
 #include <cmath>
+#include <windows.h>
 
 UnetMain::UnetMain()
 {
@@ -88,11 +90,23 @@ void  UnetMain::setModelFns(const wchar_t* model_fn)
 	}
 	
 	// 打印模型路径用于调试
+	std::wcout << L"Model path: " << model_fn << std::endl;
 	
 	unetConfig.model_file_name = model_fn;
 	
-	// 初始化ONNX Runtime Session
-	initializeSession();
+	// 检测模型类型
+	model_backend = detectModelBackend(model_fn);
+	
+	// 根据模型类型初始化
+	if (model_backend == ModelBackend::ONNX) {
+		std::cout << "Detected ONNX model, initializing ONNX Runtime..." << std::endl;
+		initializeSession();
+	} else if (model_backend == ModelBackend::TORCH) {
+		std::cout << "Detected TorchScript model, initializing LibTorch..." << std::endl;
+		initializeTorchModel();
+	} else {
+		std::cerr << "Error: Unknown model format. Supported formats: .onnx, .pt, .pth" << std::endl;
+	}
 }
 
 void  UnetMain::setStepSizeRatio(float ratio)
@@ -447,9 +461,19 @@ AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 
 AI_INT  UnetMain::performInference(AI_DataInfo *srcData)
 {
-	// 检查Session是否已初始化
-	if (!session_initialized || !semantic_seg_session_ptr) {
-		std::cerr << "Error: ONNX Session not initialized. Please set model path first." << std::endl;
+	// 检查模型是否已加载
+	if (model_backend == ModelBackend::ONNX) {
+		if (!session_initialized || !semantic_seg_session_ptr) {
+			std::cerr << "Error: ONNX Session not initialized. Please set model path first." << std::endl;
+			return UnetSegAI_LOADING_FAIED;
+		}
+	} else if (model_backend == ModelBackend::TORCH) {
+		if (!torch_model_loaded) {
+			std::cerr << "Error: TorchScript model not loaded. Please set model path first." << std::endl;
+			return UnetSegAI_LOADING_FAIED;
+		}
+	} else {
+		std::cerr << "Error: No model loaded. Please set model path first." << std::endl;
 		return UnetSegAI_LOADING_FAIED;
 	}
 	
@@ -469,16 +493,40 @@ AI_INT  UnetMain::performInference(AI_DataInfo *srcData)
 	// 调用滑窗推理
 	std::cout << "\n======= Sliding Window Inference =======" << endl;
 	auto inference_start = std::chrono::steady_clock::now();
+	
 	try {
-		AI_INT is_ok = UnetInference::runSlidingWindow(this, unetConfig, preprocessed_volume, 
-		                                              predicted_output_prob, semantic_seg_session_ptr.get(),
-		                                              cached_input_name, cached_output_name);
+		AI_INT is_ok = UnetSegAI_STATUS_FAIED;
+		
+		// 根据模型后端选择推理方法
+		if (model_backend == ModelBackend::ONNX) {
+			// ONNX Runtime 推理
+			is_ok = UnetInference::runSlidingWindow(this, unetConfig, preprocessed_volume, 
+			                                        predicted_output_prob, semantic_seg_session_ptr.get(),
+			                                        cached_input_name, cached_output_name);
+		} else if (model_backend == ModelBackend::TORCH) {
+			// TorchScript 推理
+			if (!torch_model_loaded) {
+				std::cerr << "Error: TorchScript model not loaded" << std::endl;
+				return UnetSegAI_LOADING_FAIED;
+			}
+			is_ok = UnetTorchInference::runSlidingWindowTorch(this, unetConfig, preprocessed_volume,
+			                                                  predicted_output_prob, torch_model, use_gpu);
+		} else {
+			std::cerr << "Error: No valid model backend selected" << std::endl;
+			return UnetSegAI_LOADING_FAIED;
+		}
+		
 		if (is_ok != UnetSegAI_STATUS_SUCCESS) {
 			return is_ok;
 		}
+	} catch (const c10::Error& e) {
+		std::cerr << "LibTorch error: " << e.what() << std::endl;
+		return UnetSegAI_STATUS_FAIED;
 	} catch (const std::exception& e) {
+		std::cerr << "Inference error: " << e.what() << std::endl;
 		return UnetSegAI_STATUS_FAIED;
 	} catch (...) {
+		std::cerr << "Unknown error during inference" << std::endl;
 		return UnetSegAI_STATUS_FAIED;
 	}
 
@@ -518,6 +566,90 @@ AI_INT  UnetMain::getSegMask(AI_DataInfo *dstData)
 {
 	// 使用新的UnetPostprocessor类进行后处理
 	return UnetPostprocessor::processSegmentationMask(this, predicted_output_prob, dstData);
+}
+
+// 检测模型后端类型
+UnetMain::ModelBackend UnetMain::detectModelBackend(const wchar_t* model_path)
+{
+	if (model_path == nullptr) {
+		return ModelBackend::UNKNOWN;
+	}
+	
+	std::wstring path(model_path);
+	
+	// 转换为小写进行比较
+	std::transform(path.begin(), path.end(), path.begin(), ::tolower);
+	
+	if (path.find(L".onnx") != std::wstring::npos) {
+		return ModelBackend::ONNX;
+	} else if (path.find(L".pt") != std::wstring::npos || path.find(L".pth") != std::wstring::npos) {
+		return ModelBackend::TORCH;
+	}
+	
+	return ModelBackend::UNKNOWN;
+}
+
+// 宽字符串转窄字符串
+std::string UnetMain::wstringToString(const std::wstring& wstr)
+{
+	if (wstr.empty()) return std::string();
+	
+	int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+	std::string strTo(size_needed, 0);
+	WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+	return strTo;
+}
+
+// 初始化 TorchScript 模型
+AI_INT UnetMain::initializeTorchModel()
+{
+	// 如果已经初始化，先释放旧的模型
+	if (torch_model_loaded) {
+		torch_model = torch::jit::script::Module();
+		torch_model_loaded = false;
+	}
+	
+	// 检查模型文件路径
+	if (unetConfig.model_file_name == nullptr) {
+		std::cerr << "Error: Model file path not set" << std::endl;
+		return UnetSegAI_LOADING_FAIED;
+	}
+	
+	try {
+		// 检测是否有 CUDA
+		if (use_gpu && torch::cuda::is_available()) {
+			std::cout << "CUDA is available for LibTorch" << std::endl;
+		} else {
+			use_gpu = false;
+			std::cout << "CUDA not available for LibTorch, using CPU" << std::endl;
+		}
+		
+		torch::Device device(use_gpu ? torch::kCUDA : torch::kCPU);
+		
+		// 转换宽字符路径为窄字符
+		std::wstring wpath(unetConfig.model_file_name);
+		std::string model_path = wstringToString(wpath);
+		
+		std::cout << "Loading TorchScript model: " << model_path << std::endl;
+		
+		// 加载模型
+		torch_model = torch::jit::load(model_path, device);
+		torch_model.eval();
+		
+		torch_model_loaded = true;
+		
+		std::cout << "TorchScript model loaded successfully" << std::endl;
+		std::cout << "Using " << (use_gpu ? "CUDA" : "CPU") << " for inference" << std::endl;
+		
+		return UnetSegAI_STATUS_SUCCESS;
+		
+	} catch (const c10::Error& e) {
+		std::cerr << "Failed to load TorchScript model: " << e.what() << std::endl;
+		return UnetSegAI_LOADING_FAIED;
+	} catch (const std::exception& e) {
+		std::cerr << "Error loading model: " << e.what() << std::endl;
+		return UnetSegAI_LOADING_FAIED;
+	}
 }
 
 

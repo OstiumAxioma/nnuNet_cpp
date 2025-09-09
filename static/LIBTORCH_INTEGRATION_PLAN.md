@@ -286,8 +286,53 @@ UnetSegAI_SetModelPath(handle, L"..\\..\\..\\model\\model.pt");
 - static/src/UnetMain.cpp
 - static/header/UnetMain.h
 
+## 运行时依赖（重要）
+
+### 必需的 DLL 文件清单
+
+使用 LibTorch 推理时，需要将以下 DLL 文件复制到可执行文件同目录：
+
+#### CPU 推理必需集合
+```
+# 核心 DLL
+c10.dll              (约 793KB)  - 核心张量库
+torch.dll            (约 9.5KB)  - 主入口加载器
+torch_cpu.dll        (约 126MB)  - CPU 运算实现
+torch_global_deps.dll (约 9.5KB) - 全局依赖
+
+# 额外必需依赖（2025-01-05更新）
+fbgemm.dll           (约 2.5MB)  - Facebook GEMM 优化矩阵运算库
+asmjit.dll           (约 500KB)  - JIT 编译器，用于运行时代码生成
+uv.dll               (约 350KB)  - libuv 异步 I/O 库
+mkl_intel_thread.1.dll (约 5MB) - Intel MKL 多线程数学运算库
+```
+
+#### GPU 推理额外需要
+```
+c10_cuda.dll         (约 345KB)  - CUDA 张量操作
+torch_cuda.dll       (约 836MB)  - CUDA GPU 运算实现
+```
+
+#### 可选依赖（根据模型和系统配置）
+```
+pytorch_jni.dll      - Java 接口（通常不需要）
+mkl_*.dll           - Intel MKL 其他组件（如 mkl_core.dll, mkl_intel_ilp64.dll）
+*cudnn*.dll         - cuDNN 库（深度学习优化）
+libiomp5md.dll      - OpenMP 运行时（多线程支持）
+```
+
+### 文件大小考虑
+
+- **CPU 版本（包含所有必需依赖）**：约 145MB
+- **CPU + GPU 版本**：约 1.3GB
+
+建议根据实际需求选择：
+- 仅 CPU 推理：只复制 CPU 相关 DLL
+- 需要 GPU 加速：复制全部 DLL
+
 ## 版本信息
 
 - LibTorch 版本：2.3.1
 - ONNX Runtime 版本：（现有）
 - 开发日期：2025-01-05
+- 更新日期：2025-01-05（添加 DLL 依赖说明）

@@ -1,0 +1,52 @@
+========================================
+LibTorch CUDA Test
+========================================
+CUDA Available: Yes
+cuDNN Available: Yes
+Number of CUDA devices: 1
+
+--- CUDA Test ---
+CPU Tensor:
+ 0.4228  0.8628  0.4889
+ 0.7456  0.8989  0.2082
+[ CPUFloatType{2,3} ]
+Device: cpu
+
+CUDA Tensor:
+ 0.4228  0.8628  0.4889
+ 0.7456  0.8989  0.2082
+[ CUDAFloatType{2,3} ]
+Device: cuda:0
+
+Matrix multiplication result:
+ 1.1621  1.1926
+ 1.1926  1.4074
+[ CUDAFloatType{2,2} ]
+
+Result back on CPU:
+ 1.1621  1.1926
+ 1.1926  1.4074
+[ CPUFloatType{2,2} ]
+
+CUDA operations successful!
+
+========================================
+Torch Configuration:
+========================================
+PyTorch built with:
+  - C++ Version: 201703
+  - MSVC 193833145
+  - Intel(R) oneAPI Math Kernel Library Version 2025.2-Product Build 20250620 for Intel(R) 64 architecture applications
+  - Intel(R) MKL-DNN v3.7.1 (Git Hash 8d263e693366ef8db40acc569cc7d8edf644556d)
+  - OpenMP 2019
+  - LAPACK is enabled (usually provided by MKL)
+  - CPU capability usage: AVX2
+  - CUDA Runtime 12.9
+  - NVCC architecture flags: -gencode;arch=compute_70,code=sm_70;-gencode;arch=compute_75,code=sm_75;-gencode;arch=compute_80,code=sm_80;-gencode;arch=compute_86,code=sm_86;-gencode;arch=compute_90,code=sm_90;-gencode;arch=compute_100,code=sm_100;-gencode;arch=compute_120,code=sm_120
+  - CuDNN 91.0.2
+  - Magma 2.5.4
+  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, COMMIT_SHA=a1cb3cc05d46d198467bebbb6e8fba50a325d4e7, CUDA_VERSION=12.9, CUDNN_VERSION=9.10.2, CXX_COMPILER=C:/actions-runner/_work/pytorch/pytorch/pytorch/.ci/pytorch/windows/tmp_bin/sccache-cl.exe, CXX_FLAGS=/DWIN32 /D_WINDOWS /EHsc /Zc:__cplusplus /bigobj /FS /utf-8 -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOROCTRACER -DLIBKINETO_NOXPUPTI=ON -DUSE_FBGEMM -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE /wd4624 /wd4068 /wd4067 /wd4267 /wd4661 /wd4717 /wd4244 /wd4804 /wd4273, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, TORCH_VERSION=2.8.0, USE_CUDA=ON, USE_CUDNN=ON, USE_CUSPARSELT=OFF, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=OFF, USE_NNPACK=OFF, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, USE_XCCL=OFF, USE_XPU=OFF,
+
+
+
+Test completed successfully!

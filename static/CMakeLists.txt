@@ -17,28 +17,57 @@ set(ITK_DIR "D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4")
 find_package(ITK REQUIRED)
 include(${ITK_USE_FILE})
 
-# 设置LibTorch目录（手动配置，因为缺少CMake配置文件）
-set(TORCH_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch231")
-set(TORCH_INCLUDE_DIRS "${TORCH_PATH}/include" "${TORCH_PATH}/include/torch/csrc/api/include")
+# 设置LibTorch路径 - 使用官方推荐的方法（参考成功的测试程序）
+set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch")
 
-# LibTorch库文件
-set(TORCH_LIBRARIES
-    "${TORCH_PATH}/lib/torch.lib"
-    "${TORCH_PATH}/lib/torch_cpu.lib"
-    "${TORCH_PATH}/lib/c10.lib"
-)
+# 查找Torch包 - 这会自动设置所有必要的编译标志和依赖
+find_package(Torch REQUIRED)
+
+# 显示找到的Torch库
+message(STATUS "========================================")
+message(STATUS "Found Torch: ${TORCH_LIBRARIES}")
+message(STATUS "Torch CXX Flags: ${TORCH_CXX_FLAGS}")
+message(STATUS "========================================")
+
+# 启用CUDA支持（默认启用）
+option(USE_CUDA "Enable CUDA support for LibTorch" ON)
 
 # 如果需要CUDA支持
 if(USE_CUDA)
-    list(APPEND TORCH_LIBRARIES
-        "${TORCH_PATH}/lib/torch_cuda.lib"
-        "${TORCH_PATH}/lib/c10_cuda.lib"
-        "${TORCH_PATH}/lib/caffe2_nvrtc.lib"
-    )
+    message(STATUS "========================================")
+    message(STATUS "CUDA SUPPORT ENABLED FOR LIBTORCH")
+    message(STATUS "========================================")
+    
+    # 添加CUDA编译定义
+    add_compile_definitions(USE_CUDA)
+    
+    # 尝试找到CUDA Toolkit以获取版本信息
+    find_package(CUDA QUIET)
+    if(CUDA_FOUND)
+        message(STATUS "Found CUDA Toolkit: ${CUDA_VERSION}")
+        include_directories(${CUDA_INCLUDE_DIRS})
+        # 添加CUDA运行时库
+        list(APPEND TORCH_LIBRARIES ${CUDA_LIBRARIES})
+    else()
+        # 如果find_package失败，手动设置CUDA路径
+        set(CUDA_TOOLKIT_ROOT_DIR "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.9")
+        if(EXISTS "${CUDA_TOOLKIT_ROOT_DIR}/include")
+            message(STATUS "Using manual CUDA path: ${CUDA_TOOLKIT_ROOT_DIR}")
+            include_directories("${CUDA_TOOLKIT_ROOT_DIR}/include")
+            link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib/x64")
+        endif()
+    endif()
+else()
+    message(WARNING "========================================")
+    message(WARNING "CUDA SUPPORT DISABLED FOR LIBTORCH")
+    message(WARNING "========================================")
 endif()
 
 # 设置C++17标准（LibTorch需要）
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+
+# 添加LibTorch的编译标志（重要！这包含了所有必要的CUDA相关标志）
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 # 设置输出目录
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -89,7 +118,6 @@ target_include_directories(UnetOnnxSegDLL PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/header
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/onnxruntime/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/CImg
-    ${TORCH_INCLUDE_DIRS}
 )
 
 # 查找并链接库文件
@@ -113,7 +141,7 @@ target_link_libraries(UnetOnnxSegDLL PRIVATE
     ${ONNXRUNTIME_PROVIDERS_SHARED_LIB}
     ${ONNXRUNTIME_PROVIDERS_CUDA_LIB}
     ${ITK_LIBRARIES}
-    ${TORCH_LIBRARIES}
+    "${TORCH_LIBRARIES}"  # 使用引号，因为TORCH_LIBRARIES可能包含分号分隔的列表
 )
 
 # Windows特定设置
@@ -133,6 +161,10 @@ if(WIN32)
         /W3     # 警告级别3
         /EHsc   # 启用C++异常处理
         /MP     # 多处理器编译
+        /wd4251 # 禁用C4251警告（LibTorch的STL导出警告）
+        /wd4275 # 禁用C4275警告（非DLL接口类用作基类）
+        /wd4244 # 禁用C4244警告（类型转换警告）
+        /wd4267 # 禁用C4267警告（size_t到int转换）
     )
     
     # Release配置优化

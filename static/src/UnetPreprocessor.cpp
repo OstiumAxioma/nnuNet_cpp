@@ -204,10 +204,6 @@ CImg<short> UnetPreprocessor::cropToNonzero(const CImg<short>& input, CropBBox& 
         }
     }
     
-    // 应用binary_fill_holes（与Python的scipy.ndimage.binary_fill_holes一致）
-    // 注意：目前暂时禁用以测试是否是fill hole导致的差异
-    // binaryFillHoles3d(nonzero_mask);
-    
     // 重新计算bbox（基于填充后的mask）
     cimg_forXYZ(input, x, y, z) {
         if (nonzero_mask(x, y, z)) {

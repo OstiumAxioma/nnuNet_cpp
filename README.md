@@ -34,7 +34,10 @@ nnuNet_cpp/
 ├── header/               # 主程序头文件
 ├── static/               # 静态库源代码
 ├── lib/                  # 库文件和依赖项
-├── model/                # ONNX模型文件
+│   ├── onnxruntime/      # ONNX Runtime库
+│   ├── libtorch/         # LibTorch库（PyTorch C++ 2.8.0+cu129）
+│   └── CImg/             # 图像处理库
+├── model/                # 模型文件（.onnx/.pt）
 ├── img/                  # 输入医学图像
 ├── param/                # JSON配置文件
 ├── result/               # 输出分割结果
@@ -91,6 +94,34 @@ static/
   - `cudnn64_9.dll`
   - `cudnn_*64_9.dll`（多个组件）
 - **获取来源**：[NVIDIA cuDNN](https://developer.nvidia.com/cudnn)
+
+### LibTorch（PyTorch C++）
+- **版本**：2.8.0（支持 TorchScript .pt/.pth 模型，CUDA 12.9 支持）
+- **获取来源**：
+  - CUDA 12.9 版本：https://download.pytorch.org/libtorch/cu129/libtorch-win-shared-with-deps-2.8.0%2Bcu129.zip
+  - CUDA 12.6 版本：https://download.pytorch.org/libtorch/cu126/libtorch-win-shared-with-deps-2.8.0%2Bcu126.zip
+  - CPU 版本：https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.8.0%2Bcpu.zip
+- **必需的DLL文件（CPU推理）**：
+  - 核心库：
+    - `c10.dll` - 核心张量库（793KB）
+    - `torch.dll` - 主入口加载器（9.5KB）
+    - `torch_cpu.dll` - CPU运算实现（126MB）
+    - `torch_global_deps.dll` - 全局依赖（9.5KB）
+  - 额外必需依赖：
+    - `fbgemm.dll` - Facebook GEMM优化矩阵运算（2.5MB）
+    - `asmjit.dll` - JIT编译器（500KB）
+    - `uv.dll` - libuv异步I/O（350KB）
+    - `mkl_intel_thread.1.dll` - Intel MKL数学运算（5MB）
+    - `mkl_avx2.1.dll` - Intel MKL AVX2优化（必需）
+    - `mkl_def.1.dll` - Intel MKL默认实现（必需）
+- **GPU推理额外需要**：
+  - `c10_cuda.dll`（345KB）
+  - `torch_cuda.dll`（836MB）
+  - `caffe2_nvrtc.dll`（CUDA JIT编译）
+- **总大小**：CPU版本约145MB，GPU版本约1.3GB
+- **重要提示**：
+  - 必须下载与系统 CUDA 版本匹配的 LibTorch 版本
+  - 使用官方完整包 libtorch-win-shared-with-deps-2.8.0+cu129.zip
 
 ### 重要提示
 所有运行时DLL必须放置在`lib/run/`目录中。构建脚本会自动将它们复制到可执行文件目录。

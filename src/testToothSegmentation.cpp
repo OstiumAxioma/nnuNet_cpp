@@ -131,12 +131,33 @@ int main()
         }
         
         // 检查DLL是否存在
-        vector<string> checkDLLs = {"UnetOnnxSegDLL.dll", "onnxruntime.dll", "onnxruntime_providers_cuda.dll"};
+        vector<string> checkDLLs = {
+            // Core DLLs
+            "UnetOnnxSegDLL.dll", 
+            "onnxruntime.dll", 
+            "onnxruntime_providers_cuda.dll",
+            // LibTorch CPU DLLs
+            "torch_cpu.dll",      // LibTorch CPU inference
+            "c10.dll",            // LibTorch core tensor library
+            "torch.dll",          // LibTorch main library
+            "torch_global_deps.dll", // LibTorch global dependencies
+            // LibTorch CUDA DLLs (for GPU support)
+            "torch_cuda.dll",     // LibTorch CUDA operations (required for GPU)
+            "c10_cuda.dll",       // CUDA tensor operations (required for GPU)
+            // LibTorch additional dependencies
+            "fbgemm.dll",         // Facebook GEMM library for optimized matrix operations
+            "asmjit.dll",         // JIT compiler for runtime code generation
+            "uv.dll",             // libuv for async I/O operations
+            "mkl_intel_thread.1.dll",  // Intel MKL for optimized math operations
+            // Additional Intel MKL DLLs (required for CPU inference)
+            "mkl_avx2.1.dll",     // Intel MKL AVX2 optimizations
+            "mkl_def.1.dll"       // Intel MKL default implementations
+        };
         for (const auto& dll : checkDLLs) {
             if (filesystem::exists(dll)) {
                 cout << "✓ DLL found: " << dll << endl;
             } else {
-                cout << "✗ DLL missing: " << dll << endl;
+                cout << "✗ DLL missing: " << dll << " (optional for TorchScript models)" << endl;
             }
         }
         
@@ -152,7 +173,7 @@ int main()
         
         //===== 用户选择模型文件 =====
         cout << "\n======= Model File Selection =======" << endl;
-        vector<string> modelExtensions = {".onnx"};
+        vector<string> modelExtensions = {".onnx", ".pt", ".pth"};  // Support both ONNX and TorchScript models
         string modelPath = selectFileFromDirectory("..\\\\..\\\\..\\\\model", "model", modelExtensions);
         if (modelPath.empty()) {
             cout << "Failed to select model file!" << endl;

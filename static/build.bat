@@ -32,7 +32,7 @@ if exist .vs rmdir /s /q .vs
 
 :: 配置项目
 echo Configuring UnetOnnxSegDLL project...
-cmake .. -G "Visual Studio 17 2022" -A x64 -DITK_DIR=D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4
+cmake .. -G "Visual Studio 17 2022" -A x64 -DITK_DIR=D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4 -DUSE_CUDA=ON
 
 if %ERRORLEVEL% NEQ 0 (
     echo CMake configuration failed!

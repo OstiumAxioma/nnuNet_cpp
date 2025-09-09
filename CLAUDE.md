@@ -81,6 +81,38 @@ Status codes:
 - 不要使用模型文件名来分析代码功能（如kneeseg_test仅仅是名称）
 - 不要自己运行任何脚本，要求用户手动运行并粘贴结果
 
+## LibTorch 配置重要经验
+
+### 2025-01-09: 解决 LibTorch CUDA 检测失败问题
+
+**问题描述**：
+- LibTorch 2.8.0+cu129 无法检测 CUDA，即使系统有 CUDA 12.9 和所有必要的 DLL 文件
+- `torch::cuda::is_available()` 始终返回 false
+- 同样的库在独立测试程序中工作正常
+
+**根本原因**：
+CMake 配置方法错误。手动指定 LibTorch 路径和库文件会遗漏关键的编译标志和宏定义。
+
+**解决方案**：
+必须使用官方推荐的 `find_package(Torch)` 方法：
+
+```cmake
+# 正确方法
+set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch")
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+
+# 错误方法（不要使用）
+# set(TORCH_PATH "...")
+# set(TORCH_LIBRARIES "...lib/torch.lib" ...)
+```
+
+**关键教训**：
+1. `find_package(Torch)` 会自动设置所有必要的编译标志、宏定义和依赖
+2. `TORCH_CXX_FLAGS` 包含启用 CUDA 所需的关键编译选项
+3. 手动配置容易遗漏重要设置，导致 CUDA 支持无法正确编译
+4. 参考成功的示例代码（如 ref/env_test）来配置 CMake
+
 ## Bug Fixes and Improvements
 
 ### 2025-08-29: 修复浮点精度导致的统计误差

@@ -209,6 +209,34 @@ static/
 3. **模型加载错误**：验证ONNX模型的兼容性和输入/输出名称
 4. **内存错误**：大体积数据可能需要具有足够RAM的GPU
 
+### LibTorch CUDA 配置问题（重要）
+
+**问题现象**：
+- 系统有 CUDA 12.9，GPU 能被检测到
+- LibTorch DLL 文件存在（torch_cuda.dll, c10_cuda.dll）
+- 但 `torch::cuda::is_available()` 返回 false
+
+**根本原因**：
+CMake 配置方法错误。手动配置 LibTorch 路径会遗漏关键的编译标志。
+
+**错误方法**（不要使用）：
+```cmake
+set(TORCH_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch")
+set(TORCH_LIBRARIES "${TORCH_PATH}/lib/torch.lib" ...)
+```
+
+**正确方法**（必须使用）：
+```cmake
+set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch")
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+```
+
+**关键点**：
+- 必须使用 `find_package(Torch REQUIRED)` - 官方推荐方法
+- 必须添加 `${TORCH_CXX_FLAGS}` 到编译标志 - 包含所有 CUDA 相关宏
+- find_package 会自动处理所有依赖和配置
+
 ## API使用说明
 
 静态库提供C风格的API以便集成：

@@ -390,16 +390,17 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
     int height = preprocessed_volume.height();
     int depth = preprocessed_volume.depth();
     
-    std::cout << "Volume shape: " << width << " x " << height << " x " << depth << std::endl;
-    std::cout << "Patch size: " << config.patch_size[0] << " x " << config.patch_size[1] << " x " << config.patch_size[2] << std::endl;
+    std::cout << "Volume shape (W x H x D): " << width << " x " << height << " x " << depth << std::endl;
+    std::cout << "Patch size from JSON (D x H x W): " << config.patch_size[0] << " x " << config.patch_size[1] << " x " << config.patch_size[2] << std::endl;
+    std::cout << "Actual patch extraction (W x H x D): " << config.patch_size[2] << " x " << config.patch_size[1] << " x " << config.patch_size[0] << std::endl;
 
     // Create Gaussian kernel for weighted averaging
     std::cout << "Creating Gaussian kernel..." << std::endl;
     torch::Tensor gaussian_kernel;
     try {
-        std::cout << "  Kernel dimensions: [" << config.patch_size[2] << ", " << config.patch_size[1] << ", " << config.patch_size[0] << "]" << std::endl;
+        std::cout << "  Kernel dimensions: [" << config.patch_size[0] << ", " << config.patch_size[1] << ", " << config.patch_size[2] << "]" << std::endl;
         gaussian_kernel = create3DGaussianKernel(
-            {config.patch_size[2], config.patch_size[1], config.patch_size[0]}  // depth, height, width
+            {config.patch_size[0], config.patch_size[1], config.patch_size[2]}  // 与模型期望一致: [128, 160, 112]
         );
         std::cout << "  Gaussian kernel created successfully" << std::endl;
         std::cout << "  Moving kernel to device: " << (actually_use_gpu ? "CUDA" : "CPU") << std::endl;
@@ -420,11 +421,14 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
     std::vector<int> num_steps(3);
     
     // Calculate for each dimension
+    // CImg维度: (width, height, depth) = (180, 216, 181)
+    // JSON patch_size: [depth, height, width] = [128, 160, 112]
+    // 所以对应关系是：
     for (int dim = 0; dim < 3; ++dim) {
         int vol_size, patch_size;
-        if (dim == 0) { vol_size = width; patch_size = config.patch_size[0]; }
-        else if (dim == 1) { vol_size = height; patch_size = config.patch_size[1]; }
-        else { vol_size = depth; patch_size = config.patch_size[2]; }
+        if (dim == 0) { vol_size = width; patch_size = config.patch_size[2]; }  // CImg width 对应 patch width (112)
+        else if (dim == 1) { vol_size = height; patch_size = config.patch_size[1]; }  // CImg height 对应 patch height (160)
+        else { vol_size = depth; patch_size = config.patch_size[0]; }  // CImg depth 对应 patch depth (128)
         
         num_steps[dim] = (int)std::ceil(float(vol_size - patch_size) / (patch_size * step_size_ratio)) + 1;
         if (num_steps[dim] > 1) {
@@ -444,12 +448,15 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
     CImg<float> count_vol(width, height, depth, 1, 0.0f);
     
     // Prepare patch buffers
-    CImg<float> input_patch(config.patch_size[0], config.patch_size[1], config.patch_size[2], 1, 0.0f);
-    CImg<float> weight_patch(config.patch_size[0], config.patch_size[1], config.patch_size[2], 1, 0.0f);
-    CImg<float> output_patch(config.patch_size[0], config.patch_size[1], config.patch_size[2], config.num_classes, 0.0f);
+    // CImg patch应该对应实际的空间尺寸
+    // CImg格式: (width, height, depth) = (112, 160, 128)
+    CImg<float> input_patch(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.0f);
+    CImg<float> weight_patch(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.0f);
+    CImg<float> output_patch(config.patch_size[2], config.patch_size[1], config.patch_size[0], config.num_classes, 0.0f);
     
     // Copy Gaussian weights to CImg
     torch::Tensor gaussian_cpu = gaussian_kernel.to(torch::kCPU);
+    // 直接拷贝，因为两者都是连续内存
     std::memcpy(weight_patch.data(), gaussian_cpu.data_ptr<float>(), 
                 config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float));
     
@@ -457,28 +464,32 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
     int patch_count = 0;
     for (int sx = 0; sx < num_steps[0]; sx++) {
         int lb_x = (int)std::round(sx * actual_step_size[0]);
-        int ub_x = lb_x + config.patch_size[0] - 1;
+        int ub_x = lb_x + config.patch_size[2] - 1;  // width对应patch_size[2] (112)
         
         for (int sy = 0; sy < num_steps[1]; sy++) {
             int lb_y = (int)std::round(sy * actual_step_size[1]);
-            int ub_y = lb_y + config.patch_size[1] - 1;
+            int ub_y = lb_y + config.patch_size[1] - 1;  // height对应patch_size[1] (160)
             
             for (int sz = 0; sz < num_steps[2]; sz++) {
                 int lb_z = (int)std::round(sz * actual_step_size[2]);
-                int ub_z = lb_z + config.patch_size[2] - 1;
+                int ub_z = lb_z + config.patch_size[0] - 1;  // depth对应patch_size[0] (128)
                 
                 patch_count++;
-                if (patch_count % 10 == 0 || patch_count == total_patches) {
-                    std::cout << "Processing patch " << patch_count << "/" << total_patches << std::endl;
-                }
+                // Show progress for every patch to debug tile placement
+                std::cout << "Processing patch " << patch_count << "/" << total_patches 
+                          << " at position [" << lb_x << "-" << ub_x << ", " 
+                          << lb_y << "-" << ub_y << ", " 
+                          << lb_z << "-" << ub_z << "]" << std::endl;
                 
                 // Extract patch
                 input_patch = preprocessed_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
                 
                 // Convert to tensor with shape [1, 1, depth, height, width]
+                // 模型期望: [1, 1, 128, 160, 112]
+                // 直接使用JSON中的顺序
                 torch::Tensor input_tensor = cimgToTensor(
                     input_patch,
-                    {1, 1, config.patch_size[2], config.patch_size[1], config.patch_size[0]},
+                    {1, 1, config.patch_size[0], config.patch_size[1], config.patch_size[2]},
                     device
                 );
                 
@@ -487,7 +498,31 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
                 try {
                     std::vector<torch::jit::IValue> inputs;
                     inputs.push_back(input_tensor);
-                    output_tensor = model.forward(inputs).toTensor();
+                    
+                    // Run model inference
+                    torch::jit::IValue output = model.forward(inputs);
+                    
+                    // Handle model output - could be a tensor or a list
+                    if (output.isTensor()) {
+                        // Direct tensor output
+                        output_tensor = output.toTensor();
+                    } else if (output.isList()) {
+                        // Model returns a list (typical for UNet with multiple outputs)
+                        auto output_list = output.toList();
+                        if (output_list.size() > 0) {
+                            // Get the first element (usually the final segmentation output)
+                            output_tensor = output_list.get(0).toTensor();
+                            if (patch_count == 1) {
+                                std::cout << "Model returns a list with " << output_list.size() << " outputs, using the first one" << std::endl;
+                            }
+                        } else {
+                            std::cerr << "Model returned an empty list!" << std::endl;
+                            return UnetSegAI_STATUS_FAIED;
+                        }
+                    } else {
+                        std::cerr << "Unexpected model output type (not tensor or list)" << std::endl;
+                        return UnetSegAI_STATUS_FAIED;
+                    }
                 } catch (const c10::Error& e) {
                     std::cerr << "Error during inference at patch " << patch_count << ": " << e.what() << std::endl;
                     return UnetSegAI_STATUS_FAIED;
@@ -497,11 +532,19 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
                 }
                 
                 // Apply Gaussian weighting
-                output_tensor = output_tensor.squeeze(0);  // Remove batch dimension
-                output_tensor = output_tensor * gaussian_kernel;
+                output_tensor = output_tensor.squeeze(0);  // Remove batch dimension [C, D, H, W]
                 
-                // Copy back to CPU and then to CImg
+                // Apply Gaussian kernel (element-wise multiplication for each channel)
+                for (int c = 0; c < config.num_classes; c++) {
+                    output_tensor[c] = output_tensor[c] * gaussian_kernel;
+                }
+                
+                // Convert output to CPU
                 output_tensor = output_tensor.to(torch::kCPU);
+                
+                // 参考代码直接memcpy，说明输出的内存布局与CImg匹配
+                // 输出tensor: [num_classes, depth, height, width]
+                // CImg buffer: [width, height, depth, num_classes]
                 long patch_vol_sz = config.num_classes * config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float);
                 std::memcpy(output_patch.data(), output_tensor.data_ptr<float>(), patch_vol_sz);
                 

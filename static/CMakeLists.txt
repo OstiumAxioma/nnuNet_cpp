@@ -27,7 +27,20 @@ find_package(Torch REQUIRED)
 message(STATUS "========================================")
 message(STATUS "Found Torch: ${TORCH_LIBRARIES}")
 message(STATUS "Torch CXX Flags: ${TORCH_CXX_FLAGS}")
+message(STATUS "Torch CUDA: ${TORCH_CUDA_LIBRARIES}")
+message(STATUS "Torch cuDNN: ${TORCH_CUDNN_LIBRARY}")
+message(STATUS "USE_CUDA: ${USE_CUDA}")
+message(STATUS "USE_CUDNN: ${USE_CUDNN}")
 message(STATUS "========================================")
+
+# 检查和设置cuDNN
+if(TORCH_CUDA_LIBRARIES)
+    message(STATUS "LibTorch CUDA libraries found")
+    # 设置cuDNN相关变量
+    set(CUDNN_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch/lib/cudnn64_9.dll" CACHE STRING "cuDNN library")
+    set(USE_CUDNN ON CACHE BOOL "Use cuDNN")
+    message(STATUS "cuDNN library: ${CUDNN_LIBRARY}")
+endif()
 
 # 启用CUDA支持（默认启用）
 option(USE_CUDA "Enable CUDA support for LibTorch" ON)
@@ -40,6 +53,10 @@ if(USE_CUDA)
     
     # 添加CUDA编译定义
     add_compile_definitions(USE_CUDA)
+    
+    # 添加cuDNN相关定义（解决cuDNN is set to 0的问题）
+    add_compile_definitions(USE_CUDNN)
+    add_compile_definitions(AT_CUDNN_ENABLED)
     
     # 尝试找到CUDA Toolkit以获取版本信息
     find_package(CUDA QUIET)

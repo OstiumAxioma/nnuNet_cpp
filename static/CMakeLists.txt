@@ -17,7 +17,7 @@ set(ITK_DIR "D:/Compile/ITK-5.4.3/lib/cmake/ITK-5.4")
 find_package(ITK REQUIRED)
 include(${ITK_USE_FILE})
 
-# 设置LibTorch路径 - 使用官方推荐的方法（参考成功的测试程序）
+# 设置LibTorch路径
 set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../lib/libtorch")
 
 # 查找Torch包 - 这会自动设置所有必要的编译标志和依赖

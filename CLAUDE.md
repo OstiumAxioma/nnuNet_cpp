@@ -81,6 +81,68 @@ Status codes:
 - 不要使用模型文件名来分析代码功能（如kneeseg_test仅仅是名称）
 - 不要自己运行任何脚本，要求用户手动运行并粘贴结果
 
+## 维度映射关键经验（2025-01-09）
+
+### 数据流
+```
+ITK [X,Y,Z] → CImg(X,Y,Z) → UnetPreprocessor → CImg(W,H,D) → UnetTorchInference/UnetInference
+                ↓                                     ↓
+          (width,height,depth)              (width,height,depth)
+```
+
+### 完整维度对应表
+
+| 维度 | ITK | CImg | JSON patch_size | PyTorch/LibTorch | ONNX Runtime | 说明 |
+|------|-----|------|----------------|------------------|--------------|------|
+| **数据布局** | [X, Y, Z] | (W, H, D, C) | [D, H, W] | [N, C, D, H, W] | [N, C, D, H, W] | 不同框架的内存布局 |
+| **Width (X)** | size[0] | 第1维 | patch_size[2] | 第5维 | 第5维 | 横向尺寸 |
+| **Height (Y)** | size[1] | 第2维 | patch_size[1] | 第4维 | 第4维 | 纵向尺寸 |
+| **Depth (Z)** | size[2] | 第3维 | patch_size[0] | 第3维 | 第3维 | 深度/层数 |
+
+### 具体示例（patch_size = [128, 160, 112]）
+
+| 框架 | 实际表示 | 维度顺序说明 |
+|------|---------|------------|
+| **JSON配置** | `[128, 160, 112]` | [depth, height, width] |
+| **CImg创建** | `CImg(112, 160, 128, 1)` | (width, height, depth, channels) |
+| **PyTorch Tensor** | `[1, 1, 128, 160, 112]` | [batch, channel, depth, height, width] |
+| **ONNX Input** | `[1, 1, 128, 160, 112]` | [batch, channel, depth, height, width] |
+
+### 正确的维度映射代码
+```cpp
+// UnetTorchInference.cpp 中的正确实现
+// 创建 CImg patch
+CImg<float> input_patch(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1);
+// 即: (112, 160, 128, 1) = (width, height, depth, channels)
+
+// 转换为 tensor
+torch::Tensor input_tensor = cimgToTensor(
+    input_patch,
+    {1, 1, config.patch_size[0], config.patch_size[1], config.patch_size[2]},
+    device
+);
+// 即: [1, 1, 128, 160, 112] = [batch, channel, depth, height, width]
+```
+
+### Tile混乱问题的根本原因和解决方案
+
+**问题**：盲目照搬参考代码`DentalUnet_cimg_version.cpp`的维度映射，导致模型收到错误维度的输入。
+
+**原因**：
+1. 参考代码可能使用不同的预处理器或数据加载方式
+2. 我们的数据流是：ITK → CImg → UnetPreprocessor → Model
+3. 参考代码的维度映射不适用于我们的数据流
+
+**解决方案**：
+1. 理解自己项目的数据流，不要机械复制代码
+2. 确保CImg patch尺寸正确：`(patch_size[2], patch_size[1], patch_size[0])`
+3. 确保tensor shape与模型期望一致：`[1, 1, patch_size[0], patch_size[1], patch_size[2]]`
+
+**关键教训**：
+- 必须理解数据在每个处理阶段的具体格式
+- 不同框架（ITK、CImg、PyTorch、ONNX）有不同的维度约定
+- 从错误信息（如"Expected size 8 but got size 7"）可以快速定位维度问题
+
 ## LibTorch 配置重要经验
 
 ### 2025-01-09: 解决 LibTorch CUDA 检测失败问题

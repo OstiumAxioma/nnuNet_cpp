@@ -237,6 +237,57 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 - 必须添加 `${TORCH_CXX_FLAGS}` 到编译标志 - 包含所有 CUDA 相关宏
 - find_package 会自动处理所有依赖和配置
 
+### 维度映射问题（重要）
+
+**问题现象**：
+- PyTorch 模型推理时报错 "Expected size X but got size Y"
+- 推理结果的 tile 放置完全混乱
+- 输出图像维度错误
+
+**根本原因**：
+不同框架使用不同的维度约定，混淆这些约定会导致严重错误。
+
+**完整维度对应表**：
+
+| 维度 | ITK | CImg | JSON patch_size | PyTorch/LibTorch | ONNX Runtime | 说明 |
+|------|-----|------|----------------|------------------|--------------|------|
+| **数据布局** | [X, Y, Z] | (W, H, D, C) | [D, H, W] | [N, C, D, H, W] | [N, C, D, H, W] | 不同框架的内存布局 |
+| **Width (X)** | size[0] | 第1维 | patch_size[2] | 第5维 | 第5维 | 横向尺寸 |
+| **Height (Y)** | size[1] | 第2维 | patch_size[1] | 第4维 | 第4维 | 纵向尺寸 |
+| **Depth (Z)** | size[2] | 第3维 | patch_size[0] | 第3维 | 第3维 | 深度/层数 |
+| **Channels** | - | 第4维 | - | 第2维 | 第2维 | 通道数 |
+| **Batch** | - | - | - | 第1维 | 第1维 | 批次大小 |
+
+**具体示例（patch_size = [128, 160, 112]）**：
+
+| 框架 | 实际表示 | 维度顺序说明 |
+|------|---------|------------|
+| **JSON配置** | `[128, 160, 112]` | [depth, height, width] |
+| **CImg创建** | `CImg(112, 160, 128, 1)` | (width, height, depth, channels) |
+| **PyTorch Tensor** | `[1, 1, 128, 160, 112]` | [batch, channel, depth, height, width] |
+| **ONNX Input** | `[1, 1, 128, 160, 112]` | [batch, channel, depth, height, width] |
+| **ITK Image** | `[112, 160, 128]` | [x_size, y_size, z_size] |
+
+**正确的代码示例**：
+```cpp
+// 创建 CImg patch - 注意维度顺序
+CImg<float> input_patch(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1);
+// 即: (112, 160, 128, 1) = (width, height, depth, channels)
+
+// 转换为 PyTorch tensor - 使用模型期望的顺序
+torch::Tensor input_tensor = torch::from_blob(
+    input_patch.data(),
+    {1, 1, config.patch_size[0], config.patch_size[1], config.patch_size[2]},
+    options
+);
+// 即: [1, 1, 128, 160, 112] = [batch, channel, depth, height, width]
+```
+
+**关键教训**：
+- 不要盲目复制参考代码的维度映射
+- 必须理解自己项目的数据流：ITK → CImg → Preprocessor → Model
+- 始终验证每个阶段的实际维度
+
 ## API使用说明
 
 静态库提供C风格的API以便集成：

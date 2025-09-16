@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <windows.h>
+#include "../include/SystemMonitor.h"
 
 UnetMain::UnetMain()
 {
@@ -532,8 +533,9 @@ AI_INT  UnetMain::performInference(AI_DataInfo *srcData)
 
 	auto inference_end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> inference_elapsed = inference_end - inference_start;
-	std::cout << "Inference completed in " << inference_elapsed.count() << " seconds" << endl;
-	std::cout << "======= Inference Complete =======" << endl;
+	
+	// 使用统一的输出格式和资源监控
+	SystemMonitor::printTimingAndResources("Inference", inference_elapsed.count());
 
 	// 如果进行了重采样，调整大小回原始尺寸
 	// 注意：这里需要获取裁剪后的尺寸

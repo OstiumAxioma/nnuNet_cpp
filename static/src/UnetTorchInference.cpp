@@ -1,9 +1,11 @@
 #include "UnetTorchInference.h"
 #include "UnetMain.h"
 #include <iostream>
+#include <iomanip>
 #include <cmath>
 #include <chrono>
 #include <cstdlib>  // For std::getenv
+#include "../include/SystemMonitor.h"
 
 // Try to include CUDA headers for version info
 #ifdef USE_CUDA
@@ -499,8 +501,31 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
                     std::vector<torch::jit::IValue> inputs;
                     inputs.push_back(input_tensor);
                     
+                    // 获取推理前的GPU内存状态
+                    SystemMonitor::GPUInfo gpu_before = SystemMonitor::getGPUInfo();
+                    
+                    // 记录tile推理开始时间
+                    auto tile_start = std::chrono::steady_clock::now();
+                    
                     // Run model inference
                     torch::jit::IValue output = model.forward(inputs);
+                    
+                    // 记录tile推理结束时间
+                    auto tile_end = std::chrono::steady_clock::now();
+                    std::chrono::duration<double> tile_elapsed = tile_end - tile_start;
+                    
+                    // 获取推理后的GPU内存状态
+                    SystemMonitor::GPUInfo gpu_after = SystemMonitor::getGPUInfo();
+                    
+                    // 输出tile性能信息
+                    std::cout << "  Tile inference time: " << std::fixed << std::setprecision(3) 
+                              << tile_elapsed.count() << "s" << std::endl;
+                    if (gpu_after.available) {
+                        std::cout << "  GPU memory: " << SystemMonitor::formatBytes(gpu_after.usedMemory) 
+                                  << " / " << SystemMonitor::formatBytes(gpu_after.totalMemory)
+                                  << " (" << std::fixed << std::setprecision(1) 
+                                  << gpu_after.memoryUsagePercent << "%)" << std::endl;
+                    }
                     
                     // Handle model output - could be a tensor or a list
                     if (output.isTensor()) {
@@ -572,8 +597,9 @@ AI_INT UnetTorchInference::runSlidingWindowTorch(
     
     auto end_time = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed = end_time - start_time;
-    std::cout << "TorchScript inference completed in " << elapsed.count() << " seconds" << std::endl;
-    std::cout << "======= TorchScript Inference Complete =======" << std::endl;
+    
+    // 使用统一的输出格式和资源监控
+    SystemMonitor::printTimingAndResources("TorchScript Inference", elapsed.count());
     
     return UnetSegAI_STATUS_SUCCESS;
 }

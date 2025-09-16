@@ -159,6 +159,7 @@ target_link_libraries(UnetOnnxSegDLL PRIVATE
     ${ONNXRUNTIME_PROVIDERS_CUDA_LIB}
     ${ITK_LIBRARIES}
     "${TORCH_LIBRARIES}"  # 使用引号，因为TORCH_LIBRARIES可能包含分号分隔的列表
+    psapi  # Windows进程内存信息API
 )
 
 # Windows特定设置

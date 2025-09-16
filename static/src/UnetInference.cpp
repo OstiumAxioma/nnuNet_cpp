@@ -3,8 +3,11 @@
 #include "UnetIO.h"
 #include "UnetSegAI_API.h"
 #include <iostream>
+#include <iomanip>
 #include <cmath>
 #include <limits>
+#include <chrono>
+#include "../include/SystemMonitor.h"
 
 using namespace std;
 using namespace cimg_library;
@@ -184,11 +187,34 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                         return UnetSegAI_STATUS_FAIED;
                     }
 
+                    // 获取推理前的GPU内存状态
+                    SystemMonitor::GPUInfo gpu_before = SystemMonitor::getGPUInfo();
+                    
+                    // 记录tile推理开始时间
+                    auto tile_start = std::chrono::steady_clock::now();
+                    
                     // 执行单个patch推理
                     AI_INT status = inferPatch(*session, input_patch, win_pob, 
                                               input_tensor_shape, input_name_cstr, output_name_cstr);
                     if (status != UnetSegAI_STATUS_SUCCESS) {
                         return status;
+                    }
+                    
+                    // 记录tile推理结束时间
+                    auto tile_end = std::chrono::steady_clock::now();
+                    std::chrono::duration<double> tile_elapsed = tile_end - tile_start;
+                    
+                    // 获取推理后的GPU内存状态
+                    SystemMonitor::GPUInfo gpu_after = SystemMonitor::getGPUInfo();
+                    
+                    // 输出tile性能信息
+                    std::cout << "  Tile inference time: " << std::fixed << std::setprecision(3) 
+                              << tile_elapsed.count() << "s" << std::endl;
+                    if (gpu_after.available) {
+                        std::cout << "  GPU memory: " << SystemMonitor::formatBytes(gpu_after.usedMemory) 
+                                  << " / " << SystemMonitor::formatBytes(gpu_after.totalMemory)
+                                  << " (" << std::fixed << std::setprecision(1) 
+                                  << gpu_after.memoryUsagePercent << "%)" << std::endl;
                     }
 
                     // 保存单个tile（如果启用了中间结果保存）

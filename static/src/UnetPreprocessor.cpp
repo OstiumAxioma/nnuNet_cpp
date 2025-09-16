@@ -8,6 +8,7 @@
 #include <tuple>
 #include <map>
 #include <chrono>
+#include "../include/SystemMonitor.h"
 
 using namespace std;
 using namespace cimg_library;
@@ -174,11 +175,12 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
 
     auto preprocess_end = std::chrono::steady_clock::now();
     std::chrono::duration<double> preprocess_elapsed = preprocess_end - preprocess_start;
-    std::cout << "Preprocessing completed in " << preprocess_elapsed.count() << " seconds" << std::endl;
+    
+    // 使用统一的输出格式和资源监控
+    SystemMonitor::printTimingAndResources("Preprocessing", preprocess_elapsed.count());
     std::cout << "  Preprocessed volume shape: " << output_volume.width() << " x " 
               << output_volume.height() << " x " << output_volume.depth() << std::endl;
     std::cout << "  Mean: " << output_volume.mean() << ", Std: " << std::sqrt(output_volume.variance()) << std::endl;
-    std::cout << "======= Preprocessing Complete =======" << std::endl;
 
     return UnetSegAI_STATUS_SUCCESS;
 }

@@ -1,6 +1,7 @@
 #include "UnetPostprocessor.h"
 #include "UnetIO.h"
 #include "UnetSegAI_API.h"
+#include "../include/SystemMonitor.h"
 #include <iostream>
 #include <cstring>
 
@@ -87,8 +88,9 @@ AI_INT UnetPostprocessor::processSegmentationMask(UnetMain* parent,
 
     auto postprocess_end = std::chrono::steady_clock::now();
     std::chrono::duration<double> postprocess_elapsed = postprocess_end - postprocess_start;
-    std::cout << "Post-processing completed in " << postprocess_elapsed.count() << " seconds" << endl;
-    std::cout << "======= Post-processing Complete =======" << endl;
+    
+    // 使用统一的输出格式和资源监控
+    SystemMonitor::printTimingAndResources("Post-processing", postprocess_elapsed.count());
     
     return UnetSegAI_STATUS_SUCCESS;
 }

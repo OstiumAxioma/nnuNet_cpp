@@ -43,6 +43,7 @@ typedef struct
 	AI_INT       Width;         // ������
 	AI_INT       Height;        // ������
 	AI_INT       Depth;         // �������
+	AI_INT       Channels;
 	AI_FLOAT     VoxelSpacing;  // ���ش�С����λ��mm
 	AI_FLOAT     VoxelSpacingX;  // ���ش�С����λ��mm
 	AI_FLOAT     VoxelSpacingY;  // ���ش�С����λ��mm

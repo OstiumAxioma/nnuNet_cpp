@@ -146,28 +146,6 @@ UnetSegAI_API AI_INT UnetSegAI_SetTransposeSettings(AI_HANDLE AI_Hdl,
 	return UnetSegAI_STATUS_SUCCESS;
 }
 
-UnetSegAI_API AI_INT UnetSegAI_SetNormalizationType(AI_HANDLE AI_Hdl, const char* type)
-{
-	if (AI_Hdl == NULL)
-		return UnetSegAI_STATUS_HANDLE_NULL;
-
-	UnetMain *pAIObj = reinterpret_cast<UnetMain *>(AI_Hdl);
-	pAIObj->setNormalizationType(type);
-	return UnetSegAI_STATUS_SUCCESS;
-}
-
-UnetSegAI_API AI_INT UnetSegAI_SetIntensityProperties(AI_HANDLE AI_Hdl, 
-                                                                  AI_FLOAT mean, AI_FLOAT std, 
-                                                                  AI_FLOAT min_val, AI_FLOAT max_val,
-                                                                  AI_FLOAT percentile_00_5, AI_FLOAT percentile_99_5)
-{
-	if (AI_Hdl == NULL)
-		return UnetSegAI_STATUS_HANDLE_NULL;
-
-	UnetMain *pAIObj = reinterpret_cast<UnetMain *>(AI_Hdl);
-	pAIObj->setIntensityProperties(mean, std, min_val, max_val, percentile_00_5, percentile_99_5);
-	return UnetSegAI_STATUS_SUCCESS;
-}
 
 UnetSegAI_API AI_INT UnetSegAI_SetUseMirroring(AI_HANDLE AI_Hdl, AI_BOOL use_mirroring)
 {

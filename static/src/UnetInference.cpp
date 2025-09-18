@@ -41,9 +41,23 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
         if (config.patch_size.size() != 3) {
             throw std::runtime_error("Patch size should be 3D (depth, height, width)");
         }
-
-        // ONNX张量形状: (batch, channel, depth, height, width)
-        std::vector<int64_t> input_tensor_shape = { 1, 1, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
+        const int num_channels = config.input_channels;
+        
+        // 判断是否为2D情况（与UnetPreprocessor.cpp中的逻辑一致）
+        bool is_2d = config.voxel_spacing.size() == 2;
+        
+        // 根据2D/3D情况构建ONNX输入张量的形状
+        std::vector<int64_t> input_tensor_shape;
+        if (is_2d) {
+            // ONNX 2D张量形状: (batch, channel, height, width)
+            // config.patch_size for 2D is assumed to be {height, width}
+            input_tensor_shape = { 1, (int64_t)num_channels, config.patch_size[0], config.patch_size[1] };
+        } else {
+            // ONNX 3D张量形状: (batch, channel, depth, height, width)
+            // config.patch_size for 3D is assumed to be {depth, height, width}
+            input_tensor_shape = { 1, (int64_t)num_channels, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
+        }
+        // =================  END OF MODIFIED SECTION  =================
 
         int depth = input.depth();
         int width = input.width();
@@ -74,15 +88,14 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
         int pad_height_after = padded_height - height - pad_height_before;
         
         // 创建padded volume
-        CImg<float> padded_volume(padded_width, padded_height, padded_depth, 1, 0.0f);
-        
+        CImg<float> padded_volume(padded_width, padded_height, padded_depth, num_channels, 0.0f);
+
         // 复制原始数据到padded volume的中心
-        if (pad_depth_before >= 0 && pad_width_before >= 0 && pad_height_before >= 0) {
-            cimg_forXYZ(input, x, y, z) {
-                padded_volume(x + pad_width_before, y + pad_height_before, z + pad_depth_before) = 
-                    input(x, y, z);
+       if (pad_depth_before>=0 && pad_width_before>=0 && pad_height_before>=0){
+            cimg_forXYZC(input, x, y, z, c) {
+                padded_volume(x + pad_width_before, y + pad_height_before, z + pad_depth_before, c) = input(x, y, z, c);
             }
-        } else {
+        }else{
             padded_volume = input;
         }
         

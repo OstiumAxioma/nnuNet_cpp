@@ -249,9 +249,11 @@ int main()
         srcData->Height = size[1];
         srcData->Depth = size[2];
         srcData->VoxelSpacing = 1.0f;
+        srcData->Channels = inputCbctVolume.spectrum();
         srcData->VoxelSpacingX = real_voxel_size[0];
         srcData->VoxelSpacingY = real_voxel_size[1];
         srcData->VoxelSpacingZ = real_voxel_size[2];
+        // 需要给OriginalVoxelSpacing单独赋值，否则可能会出现初始化异常问题
         srcData->OriginalVoxelSpacingX = real_voxel_size[0];
         srcData->OriginalVoxelSpacingY = real_voxel_size[1];
         srcData->OriginalVoxelSpacingZ = real_voxel_size[2];

@@ -49,22 +49,17 @@ struct nnUNetConfig {
 	std::vector<int64_t> patch_size;
 	float step_size_ratio;
 
-	std::string normalization_type;
 	std::string task_type; //"classification, segmentation, regression, detection"
-	std::vector<float> min_max_HU;
-	std::vector<float> mean_std_HU;
 	
 	// 直接访问的intensity properties
-	double mean;  // 改为double提高精度
-	double std;   // 改为double提高精度
-	
-	// percentile值用于CT归一化裁剪
-	double percentile_00_5;  // 改为double提高精度
-	double percentile_99_5;  // 改为double提高精度
+    std::vector<double> means;
+    std::vector<double> stds;
+    std::vector<double> percentile_00_5s;
+    std::vector<double> percentile_99_5s;
 	
 	// 归一化相关参数
-	bool use_mask_for_norm;
-
+    std::vector<std::string> normalization_schemes;
+    std::vector<bool> use_mask_for_norm;
 	bool use_mirroring;
 };
 
@@ -99,9 +94,6 @@ public:
 	void    setTargetSpacing(float x, float y, float z);
 	void    setTransposeSettings(int forward_x, int forward_y, int forward_z, 
 	                           int backward_x, int backward_y, int backward_z);
-	void    setNormalizationType(const char* type);
-	void    setIntensityProperties(float mean, float std, float min_val, float max_val,
-	                             float percentile_00_5, float percentile_99_5);
 	void    setUseMirroring(bool use_mirroring);
 	
 	// 新增：JSON配置接口
@@ -136,8 +128,8 @@ private:
 	//输入：原始CBCT体数据
 	CImg<short> input_cbct_volume;
 
-	double intensity_mean;  // 改为double提高精度
-	double intensity_std;   // 改为double提高精度
+	std::vector<double> intensity_means;
+	std::vector<double> intensity_stds;
 	
 	// 预处理相关成员变量
 	CropBBox crop_bbox;  // 保存裁剪边界信息
@@ -146,7 +138,7 @@ private:
 	int Width0;
 	int Height0;
 	int Depth0;
-
+	int Channels0;
 	std::vector<float> input_voxel_spacing;
 	std::vector<float> transposed_input_voxel_spacing;
 	// 保存原始spacing（从文件读取的真实物理spacing）

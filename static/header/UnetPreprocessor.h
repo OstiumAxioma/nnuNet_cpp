@@ -18,18 +18,20 @@ public:
                                   cimg_library::CImg<short>& input_volume,
                                   cimg_library::CImg<float>& output_volume);
     
+private:
     // 裁剪到非零区域
     static cimg_library::CImg<short> cropToNonzero(const cimg_library::CImg<short>& input, 
                                                   CropBBox& bbox, 
                                                   cimg_library::CImg<short>& seg_mask);
     
     // CT归一化
-    static void CTNormalization(cimg_library::CImg<float>& volume, const nnUNetConfig& config);
+    static void CTNormalization(cimg_library::CImg<float>& volume, const nnUNetConfig& config,int channel_index);
     
     // Z-Score归一化
     static void ZScoreNormalization(cimg_library::CImg<float>& volume, 
                                    const cimg_library::CImg<short>& seg_mask,
                                    const nnUNetConfig& config,
+                                   int channel_index,
                                    double& intensity_mean,
                                    double& intensity_std);
     

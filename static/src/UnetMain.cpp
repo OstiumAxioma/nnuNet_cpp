@@ -51,9 +51,12 @@ UnetMain::UnetMain()
 	unetConfig.use_mirroring = false;
 	
 	// 初始化intensity properties的默认值
-	unetConfig.mean = 0.0f;
-	unetConfig.std = 1.0f;
-	unetConfig.use_mask_for_norm = false;  // 默认不使用mask
+	unetConfig.means.assign(1, 0.0);
+	unetConfig.stds.assign(1, 1.0);
+	unetConfig.percentile_00_5s.assign(1, 0.0);
+    unetConfig.percentile_99_5s.assign(1, 1.0);
+	unetConfig.normalization_schemes.assign(1, "ZscoreNormalization");
+	unetConfig.use_mask_for_norm.assign(1,false);  // 默认不使用mask
 	
 	// 下面是需要从外部配置的参数
 	// voxel_spacing, patch_size, step_size_ratio, normalization_type, intensity properties
@@ -149,22 +152,6 @@ void UnetMain::setTransposeSettings(int forward_x, int forward_y, int forward_z,
 	unetConfig.transpose_backward = { backward_x, backward_y, backward_z };
 }
 
-void UnetMain::setNormalizationType(const char* type)
-{
-	unetConfig.normalization_type = type;
-}
-
-void UnetMain::setIntensityProperties(float mean, float std, float min_val, float max_val,
-                                      float percentile_00_5, float percentile_99_5)
-{
-	unetConfig.mean_std_HU = { mean, std };
-	unetConfig.min_max_HU = { min_val, max_val };
-	unetConfig.percentile_00_5 = static_cast<double>(percentile_00_5);
-	unetConfig.percentile_99_5 = static_cast<double>(percentile_99_5);
-	unetConfig.mean = static_cast<double>(mean);
-	unetConfig.std = static_cast<double>(std);
-}
-
 void UnetMain::setUseMirroring(bool use_mirroring)
 {
 	unetConfig.use_mirroring = use_mirroring;
@@ -199,15 +186,6 @@ bool UnetMain::setConfigFromJsonString(const char* jsonContent)
 		transposeBackwardStr = backward_str;
 		unetConfig.cimg_transpose_forward = transposeForwardStr.c_str();
 		unetConfig.cimg_transpose_backward = transposeBackwardStr.c_str();
-		
-		// 设置额外的向量字段（这些在applyConfigToUnet中已经处理了，但需要确认）
-		unetConfig.mean_std_HU.clear();
-		unetConfig.mean_std_HU.push_back(config.mean);
-		unetConfig.mean_std_HU.push_back(config.std);
-		
-		unetConfig.min_max_HU.clear();
-		unetConfig.min_max_HU.push_back(config.min_val);
-		unetConfig.min_max_HU.push_back(config.max_val);
 		
 		return true;
 	}
@@ -250,6 +228,7 @@ AI_INT  UnetMain::setOnnxruntimeInstances()
 
 			Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
 		} catch (const Ort::Exception& e) {
+			(void)e;  // 消除未使用变量警告
 			use_gpu = false;
 		}
 	} else {
@@ -285,6 +264,7 @@ AI_INT UnetMain::initializeSession()
 			Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0));
 			std::cout << "Using CUDA execution provider" << std::endl;
 		} catch (const Ort::Exception& e) {
+			(void)e;  // 消除未使用变量警告
 			std::cout << "CUDA not available, falling back to CPU" << std::endl;
 			use_gpu = false;
 		}
@@ -343,6 +323,7 @@ AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 	Width0 = srcData->Width;
 	Height0 = srcData->Height;
 	Depth0 = srcData->Depth;
+	Channels0 = srcData->Channels;
 	float voxelSpacing = srcData->VoxelSpacing; //单位: mm
 	float voxelSpacingX = srcData->VoxelSpacingX; //单位: mm
 	float voxelSpacingY = srcData->VoxelSpacingY; //单位: mm
@@ -381,8 +362,8 @@ AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 
 	// 创建CImg对象并复制数据
 	//RAI: 右-前-上坐标系，与医学图像标准一致
-	input_cbct_volume = CImg<short>(Width0, Height0, Depth0, 1, 0);
-	long volSize = Width0 * Height0 * Depth0 * sizeof(short);
+	input_cbct_volume = CImg<short>(Width0, Height0, Depth0, Channels0, 0);
+	long volSize = Width0 * Height0 * Depth0 *Channels0* sizeof(short);
 	std::memcpy(input_cbct_volume.data(), srcData->ptr_Data, volSize);
 
 	// 移除统计计算 - 将在预处理管道中的正确位置计算

@@ -13,6 +13,7 @@
 using namespace std;
 using namespace cimg_library;
 
+
 // 主预处理函数 - 执行完整的预处理管道
 AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent, 
                                          nnUNetConfig& config, 
@@ -59,47 +60,79 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
     CImg<short> cropped_volume = cropToNonzero(input_volume, parent->crop_bbox, parent->seg_mask);
     
     // 步骤3：计算归一化参数
-    // 根据归一化类型决定是否使用JSON配置的值
-    if (config.normalization_type == "ZScoreNormalization") {
-        // ZScoreNormalization总是动态计算mean和std（MRI等模态）
-        if (config.use_mask_for_norm) {
-            // 在mask区域动态计算（将在归一化步骤中进行）
-            parent->intensity_mean = 0.0;  // 占位值
-            parent->intensity_std = 1.0;   // 占位值
+    int num_channels = cropped_volume.spectrum();
+    parent->intensity_means.assign(num_channels, 0.0);
+    parent->intensity_stds.assign(num_channels, 1.0);
+
+    for (int c = 0; c < num_channels; ++c) {
+        CImg<short> channel_view = cropped_volume.get_shared_channel(c);
+        const std::string& norm_scheme = config.normalization_schemes[c];
+        if (norm_scheme == "ZScoreNormalization") {
+            if (config.use_mask_for_norm[c]) {
+                // 在mask区域动态计算，将在归一化步骤中进行
+                // 暂时使用占位值
+                parent->intensity_means[c] = 0.0;
+                parent->intensity_stds[c] = 1.0;
+            } else {
+                // 在整个裁剪后的数据上动态计算
+                parent->intensity_means[c] = channel_view.mean();
+                double var = channel_view.variance();
+                parent->intensity_stds[c] = std::sqrt(var);
+                if (parent->intensity_stds[c] < 1e-8) parent->intensity_stds[c] = 1e-8;
+            }
+        } else if (norm_scheme == "CTNormalization" || norm_scheme == "CT" || norm_scheme == "ct") {
+            // CTNormalization使用JSON配置的值
+            parent->intensity_means[c] = config.means[c];
+            parent->intensity_stds[c] = config.stds[c];
         } else {
-            // 在整个裁剪后的数据上动态计算
-            parent->intensity_mean = cropped_volume.mean();  // CImg::mean()返回double
-            double var = cropped_volume.variance();  // CImg::variance()返回double
-            parent->intensity_std = std::sqrt(var);
-            if (parent->intensity_std < 1e-8) parent->intensity_std = 1e-8;  // 匹配Python的max(std, 1e-8)
+            // 其他或未指定类型的默认行为：动态计算
+            parent->intensity_means[c] = channel_view.mean();
+            double var = channel_view.variance();
+            parent->intensity_stds[c] = std::sqrt(var);
+            if (parent->intensity_stds[c] < 1e-8) parent->intensity_stds[c] = 1e-8;
         }
-    } else if (config.normalization_type == "CTNormalization" || 
-               config.normalization_type == "CT" || 
-               config.normalization_type == "ct") {
-        // CTNormalization使用JSON配置的值（CT等标准化模态）
-        parent->intensity_mean = config.mean;
-        parent->intensity_std = config.std;
-    } else {
-        // 默认行为：动态计算
-        parent->intensity_mean = cropped_volume.mean();
-        double var = cropped_volume.variance();
-        parent->intensity_std = std::sqrt(var);
-        if (parent->intensity_std < 1e-8) parent->intensity_std = 1e-8;
     }
 
     // 步骤4：计算输出尺寸
     bool is_volume_scaled = true;  // 始终进行缩放（与Python一致）
     std::vector<int64_t> input_size = { cropped_volume.width(), cropped_volume.height(), cropped_volume.depth() };
     std::vector<int64_t> output_size;
-    
-    for (int i = 0; i < 3; ++i) {
-        float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
-        int scaled_sz = std::round(input_size[i] * scaled_factor);
-        
-        if (scaled_sz < config.patch_size[i])
-            scaled_sz = config.patch_size[i];
 
-        output_size.push_back(static_cast<int64_t>(scaled_sz));
+    // ================= START OF MODIFIED SECTION =================
+    // 参考Python代码逻辑，增加对2D情况的处理
+    // 在nnU-Net中，2D模型的plans.json文件中 "voxel_spacing" 键对应的值会是一个二维数组
+    bool is_2d = config.voxel_spacing.size() == 2;
+
+    if (is_2d) {
+        // 对于2D情况，我们只对空间维度（通常是X和Y）进行重采样。
+        // 第三个维度（通常是Z，即切片维度）保持其原始大小，不进行缩放。
+        // 假设转置后的维度顺序是 X, Y, Z
+
+        // 缩放 X 和 Y 维度
+        for (int i = 0; i < 2; ++i) {
+            float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
+            int scaled_sz = std::round(input_size[i] * scaled_factor);
+
+            //if (scaled_sz < config.patch_size[i]) {
+                //scaled_sz = config.patch_size[i];
+            //}
+            output_size.push_back(static_cast<int64_t>(scaled_sz));
+        }
+
+        // Z 维度的尺寸保持不变
+        output_size.push_back(input_size[2]);
+
+    } else {
+        // 原始的3D情况处理逻辑：对所有三个维度进行重采样
+        for (int i = 0; i < 3; ++i) {
+            float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
+            int scaled_sz = std::round(input_size[i] * scaled_factor);
+
+            //if (scaled_sz < config.patch_size[i])
+                //scaled_sz = config.patch_size[i];
+
+            output_size.push_back(static_cast<int64_t>(scaled_sz));
+        }
     }
 
     // 步骤5：归一化（在原始分辨率上进行）
@@ -118,34 +151,22 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
         metadata.spacing[2] = parent->imageMetadata.spacing[2];
         UnetIO::savePreprocessedData(normalized_volume, parent->preprocessOutputPath, L"before_normalization", metadata);
     }
-    
-    // 执行归一化
-    std::map<std::string, int> normalizationOptionsMap = {
-        {"CTNormalization",     10},
-        {"CT",                  10},
-        {"ct",                  10},
-        {"CTNorm",              10},
-        {"ctnorm",              10},
-        {"ZScoreNormalization", 20},
-        {"zscore",              20},
-        {"z-score",             20},
-    };
-    auto it = normalizationOptionsMap.find(config.normalization_type);
-    int normalization_type = (it != normalizationOptionsMap.end()) ? it->second : 20;
 
-    switch (normalization_type) {
-    case 10:
-        CTNormalization(normalized_volume, config);
-        break;
-    case 20:
-        ZScoreNormalization(normalized_volume, parent->seg_mask, config, 
-                          parent->intensity_mean, parent->intensity_std);
-        break;
-    default:
-        // 默认使用Z-Score归一化
-        normalized_volume -= parent->intensity_mean;
-        normalized_volume /= parent->intensity_std;
-        break;
+    // 执行归一化（逐通道）
+    for (int c = 0; c < num_channels; ++c) {
+        CImg<float> channel_view = normalized_volume.get_shared_channel(c);
+        const std::string& norm_scheme = config.normalization_schemes[c];
+
+        if (norm_scheme == "CTNormalization" || norm_scheme == "CT" || norm_scheme == "ct") {
+            CTNormalization(channel_view, config, c);
+        } else if (norm_scheme == "ZScoreNormalization") {
+            // ZScoreNormalization现在直接修改传入的channel_view
+            ZScoreNormalization(channel_view, parent->seg_mask, config, c, parent->intensity_means[c], parent->intensity_stds[c]);
+        } else {
+            // 默认使用Z-Score归一化（使用已计算好的参数）
+            channel_view -= parent->intensity_means[c];
+            channel_view /= parent->intensity_stds[c];
+        }
     }
 
     // 步骤6：重采样（在归一化后进行）
@@ -201,11 +222,21 @@ CImg<short> UnetPreprocessor::cropToNonzero(const CImg<short>& input, CropBBox& 
     
     // 扫描整个体积找到非零区域
     cimg_forXYZ(input, x, y, z) {
-        if (input(x, y, z) != 0) {
+        bool is_voxel_nonzero = false;
+        for (int c = 0; c < input.spectrum(); ++c) {
+            if (input(x, y, z, c) != 0) {
+                is_voxel_nonzero = true;
+                break;
+            }
+        }
+        if (is_voxel_nonzero) {
             nonzero_mask(x, y, z) = true;
         }
     }
-    
+    // 应用binary_fill_holes（与Python的scipy.ndimage.binary_fill_holes一致）
+    // 注意：目前暂时禁用以测试是否是fill hole导致的差异
+    // binaryFillHoles3d(nonzero_mask);
+
     // 重新计算bbox（基于填充后的mask）
     cimg_forXYZ(input, x, y, z) {
         if (nonzero_mask(x, y, z)) {
@@ -263,20 +294,22 @@ CImg<short> UnetPreprocessor::cropToNonzero(const CImg<short>& input, CropBBox& 
     return cropped;
 }
 
-// CT归一化 - 使用配置的percentile值进行裁剪和标准化
-void UnetPreprocessor::CTNormalization(CImg<float>& input_volume, const nnUNetConfig& config)
+// CT归一化 - 修改为处理单个通道，并使用channel_index获取参数
+void UnetPreprocessor:: CTNormalization(CImg<float>& volume_channel, const nnUNetConfig& config, int channel_index)
 {
-    // 使用percentile值进行裁剪（与Python版本一致）
-    double lower_bound = config.percentile_00_5;
-    double upper_bound = config.percentile_99_5;
+    // 使用对应通道的percentile值进行裁剪
+    double lower_bound = config.percentile_00_5s[channel_index];
+    double upper_bound = config.percentile_99_5s[channel_index];
     
-    input_volume.cut(lower_bound, upper_bound);
+    volume_channel.cut(lower_bound, upper_bound);
 
-    // 应用z-score标准化（使用double提高精度）
-    double mean_hu = config.mean_std_HU[0];
-    double std_hu = config.mean_std_HU[1];
-    input_volume -= mean_hu;
-    input_volume /= std_hu;
+    // 应用对应通道的z-score标准化
+    double mean_hu = config.means[channel_index];
+    double std_hu = config.stds[channel_index];
+    if (std_hu < 1e-8) std_hu = 1e-8;
+    
+    volume_channel -= mean_hu;
+    volume_channel /= std_hu;
 }
 
 // 辅助函数：3D binary_fill_holes实现（匹配scipy.ndimage.binary_fill_holes）
@@ -374,32 +407,27 @@ static void binaryFillHoles3d(CImg<bool>& mask) {
 }
 
 // Z-Score归一化
-void UnetPreprocessor::ZScoreNormalization(CImg<float>& volume, 
-                                          const CImg<short>& seg_mask,
-                                          const nnUNetConfig& config,
-                                          double& intensity_mean,
-                                          double& intensity_std)
+// Z-Score归一化 - 修改为处理单个通道
+void UnetPreprocessor::ZScoreNormalization(CImg<float>& volume_channel, 
+                         const CImg<short>& seg_mask,
+                         const nnUNetConfig& config,
+                         int channel_index,
+                         double& intensity_mean,
+                         double& intensity_std)
 {
-    if (config.use_mask_for_norm && !seg_mask.is_empty()) {
-        // 使用seg_mask创建mask（与Python一致：seg >= 0表示非零区域）
-        // Python: mask = seg[0] >= 0
-        CImg<bool> mask(volume.width(), volume.height(), volume.depth());
-        cimg_forXYZ(volume, x, y, z) {
-            // seg_mask中：0表示非零区域，-1表示背景
-            // 所以seg_mask >= 0就是非零区域
+    if (config.use_mask_for_norm[channel_index] && !seg_mask.is_empty()) {
+        CImg<bool> mask(volume_channel.width(), volume_channel.height(), volume_channel.depth());
+        cimg_forXYZ(volume_channel, x, y, z) {
             mask(x, y, z) = (seg_mask(x, y, z) >= 0);
         }
         
-        // 在mask区域动态计算mean和std（匹配Python行为）
-        // 使用double提高精度，避免累积误差
         double mask_mean = 0.0;
-        double mask_std = 0.0;
-        int mask_count = 0;
+        double mask_std_dev = 0.0;
+        long long mask_count = 0;
         
-        // 计算mask区域的mean
-        cimg_forXYZ(volume, x, y, z) {
+        cimg_forXYZ(volume_channel, x, y, z) {
             if (mask(x, y, z)) {
-                mask_mean += volume(x, y, z);
+                mask_mean += volume_channel(x, y, z);
                 mask_count++;
             }
         }
@@ -407,39 +435,32 @@ void UnetPreprocessor::ZScoreNormalization(CImg<float>& volume,
         if (mask_count > 0) {
             mask_mean /= mask_count;
             
-            // 计算mask区域的std
-            cimg_forXYZ(volume, x, y, z) {
+            cimg_forXYZ(volume_channel, x, y, z) {
                 if (mask(x, y, z)) {
-                    double diff = volume(x, y, z) - mask_mean;
-                    mask_std += diff * diff;
+                    double diff = volume_channel(x, y, z) - mask_mean;
+                    mask_std_dev += diff * diff;
                 }
             }
-            mask_std = std::sqrt(mask_std / mask_count);
-            if (mask_std < 1e-8) mask_std = 1e-8;  // 匹配Python的max(std, 1e-8)
+            mask_std_dev = std::sqrt(mask_std_dev / mask_count);
+            if (mask_std_dev < 1e-8) mask_std_dev = 1e-8;
             
-            // 更新返回的值
+            // 更新由外部传入的引用值
             intensity_mean = mask_mean;
-            intensity_std = mask_std;
+            intensity_std = mask_std_dev;
             
-            // 只对mask区域进行归一化，背景设为0
-            cimg_forXYZ(volume, x, y, z) {
+            cimg_forXYZ(volume_channel, x, y, z) {
                 if (mask(x, y, z)) {
-                    volume(x, y, z) = (volume(x, y, z) - mask_mean) / mask_std;
+                    volume_channel(x, y, z) = (volume_channel(x, y, z) - mask_mean) / mask_std_dev;
                 } else {
-                    volume(x, y, z) = 0.0f;
+                    volume_channel(x, y, z) = 0.0f;
                 }
             }
         }
     } else {
-        // 传统的全局归一化
-        // 使用double提高精度
-        intensity_mean = volume.mean();
-        double var = volume.variance();
-        intensity_std = std::sqrt(var);
-        if (intensity_std < 1e-8) intensity_std = 1e-8;
-        
-        volume -= intensity_mean;
-        volume /= intensity_std;
+        // 传统的全局归一化（但现在只作用于单个通道）
+        // 使用已经预先计算好的mean和std
+        volume_channel -= intensity_mean;
+        volume_channel /= intensity_std;
     }
 }
 

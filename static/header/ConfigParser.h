@@ -16,14 +16,14 @@ public:
     std::vector<float> target_spacing;
     std::vector<int> transpose_forward;
     std::vector<int> transpose_backward;
-    float mean;
-    float std;
-    float min_val;
-    float max_val;
-    float percentile_00_5;
-    float percentile_99_5;
-    std::string normalization_scheme;
-    bool use_mask_for_norm;
+    std::vector<float> mean;
+    std::vector<float> std;
+    std::vector<float> min_val;
+    std::vector<float> max_val;
+    std::vector<float> percentile_00_5;
+    std::vector<float> percentile_99_5;
+    std::vector<std::string> normalization_scheme;
+    std::vector<bool> use_mask_for_norm;
     bool use_tta;
     
     ModelConfig();
@@ -50,5 +50,7 @@ private:
     bool parseBoolValue(const std::string& jsonContent, const std::string& key, bool& value);
     bool parseIntArray(const std::string& jsonContent, const std::string& key, std::vector<int>& array);
     bool parseFloatArray(const std::string& jsonContent, const std::string& key, std::vector<float>& array);
+    bool parseStringArray(const std::string& jsonContent, const std::string& key, std::vector<std::string>& array);
+    bool parseBoolArray(const std::string& jsonContent, const std::string& key, std::vector<bool>& array);
     bool parseIntensityProperties(const std::string& jsonContent, ModelConfig& config);
 };

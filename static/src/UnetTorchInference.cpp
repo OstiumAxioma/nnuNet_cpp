@@ -6,6 +6,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstdlib>  // For std::getenv
+#include <limits>   // For std::numeric_limits
 #include "../include/SystemMonitor.h"
 
 // Try to include CUDA headers for version info
@@ -24,25 +25,20 @@ torch::Tensor UnetTorchInference::create3DGaussianKernel(const std::vector<int64
         throw std::runtime_error("Window sizes must have 3 dimensions");
     }
 
+    // 使用与Python版本相同的sigma计算方法：sigma = size * (1/8)
     std::vector<float> sigmas(3);
+    float sigma_scale = 1.0f / 8.0f;  // 与Python版本保持一致
     for (int i = 0; i < 3; ++i) {
-        sigmas[i] = (window_sizes[i] - 1) / 6.0f;  // Standard deviation calculation
+        sigmas[i] = window_sizes[i] * sigma_scale;  // 修正：使用size * 1/8，而不是(size-1)/6
     }
-    std::cout << "    Sigmas calculated: [" << sigmas[0] << ", " << sigmas[1] << ", " << sigmas[2] << "]" << std::endl;
-
     // Create 1D Gaussian kernels for each dimension
-    std::cout << "    Creating torch tensor options..." << std::endl;
     auto options = torch::TensorOptions().dtype(torch::kFloat32);
     
-    std::cout << "    Creating linspace for x dimension..." << std::endl;
     auto x = torch::linspace(-(window_sizes[0] - 1) / 2.0, (window_sizes[0] - 1) / 2.0, window_sizes[0], options);
-    std::cout << "    Creating linspace for y dimension..." << std::endl;
     auto y = torch::linspace(-(window_sizes[1] - 1) / 2.0, (window_sizes[1] - 1) / 2.0, window_sizes[1], options);
-    std::cout << "    Creating linspace for z dimension..." << std::endl;
     auto z = torch::linspace(-(window_sizes[2] - 1) / 2.0, (window_sizes[2] - 1) / 2.0, window_sizes[2], options);
 
     // Calculate Gaussian values
-    std::cout << "    Calculating Gaussian values..." << std::endl;
     auto gauss_x = torch::exp(-0.5 * x.pow(2) / pow(sigmas[0], 2));
     auto gauss_y = torch::exp(-0.5 * y.pow(2) / pow(sigmas[1], 2));
     auto gauss_z = torch::exp(-0.5 * z.pow(2) / pow(sigmas[2], 2));
@@ -59,9 +55,41 @@ torch::Tensor UnetTorchInference::create3DGaussianKernel(const std::vector<int64
         * gauss_y.unsqueeze(0).unsqueeze(-1)
         * gauss_z.unsqueeze(0).unsqueeze(0);
 
-    // Normalize by mean to maintain intensity scale
-    auto result = kernel / kernel.mean();
-    return result;
+    // 归一化：除以最大值（与Python版本保持一致）
+    float max_val = kernel.max().item<float>();
+    torch::Tensor result;
+    if (max_val > 0) {
+        result = kernel / max_val;
+        // 可选：乘以value_scaling_factor（ONNX版本使用10.0）
+        // float value_scaling_factor = 10.0f;
+        // result = result * value_scaling_factor;
+    } else {
+        result = kernel;  // 如果max为0，保持原样
+    }
+    
+    // 处理0值：将0替换为最小非零值（与Python版本保持一致）
+    float min_non_zero = std::numeric_limits<float>::max();
+    torch::Tensor cpu_kernel = result.to(torch::kCPU);
+    float* data_ptr = cpu_kernel.data_ptr<float>();
+    int64_t total_elements = cpu_kernel.numel();
+    
+    // 找到最小非零值
+    for (int64_t i = 0; i < total_elements; ++i) {
+        if (data_ptr[i] > 0 && data_ptr[i] < min_non_zero) {
+            min_non_zero = data_ptr[i];
+        }
+    }
+    
+    // 替换0值
+    if (min_non_zero < std::numeric_limits<float>::max()) {
+        for (int64_t i = 0; i < total_elements; ++i) {
+            if (data_ptr[i] == 0) {
+                data_ptr[i] = min_non_zero;
+            }
+        }
+    }
+    
+    return cpu_kernel;
 }
 
 // Convert CImg to Torch Tensor

@@ -12,6 +12,36 @@
 using namespace std;
 using namespace cimg_library;
 
+namespace UnetDebug {
+    // 默认关闭：不打印每瓦片日志，也不在环内调用 cudaMemGetInfo
+    constexpr bool kTileDebug = false;
+    // 仅在每 N 个瓦片上打印/采样一次（例如 100）。当 kTileDebug=false 时，此值无效
+    constexpr int  kTileDebugEveryN = 100;
+    inline bool ShouldLogTile(std::size_t tile_idx) noexcept {
+        return kTileDebug && (tile_idx % kTileDebugEveryN == 0);
+    }
+}
+
+struct GPUSample {
+    bool    valid = false;
+    size_t  usedBytes = 0;
+    size_t  totalBytes = 0;
+    double  usagePercent = 0.0;
+};
+
+// 只有在需要时才真正读取 GPU 信息；默认返回 invalid，避免昂贵查询
+static inline GPUSample MaybeSampleGPU(std::size_t tile_idx) {
+    GPUSample s;
+    if (!UnetDebug::ShouldLogTile(tile_idx)) return s; // 默认不采样
+    auto info = SystemMonitor::getGPUInfo();
+    // 依据你的 SystemMonitor::GPUInfo 字段名进行映射
+    s.valid        = info.available;           // 若你的实现没有 available，可改为 true
+    s.usedBytes    = info.usedMemory;
+    s.totalBytes   = info.totalMemory;
+    s.usagePercent = info.memoryUsagePercent;  
+    return s;
+}
+
 // 主推理函数 - 滑窗推理
 AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                                       const nnUNetConfig& config,
@@ -57,7 +87,6 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
             // config.patch_size for 3D is assumed to be {depth, height, width}
             input_tensor_shape = { 1, (int64_t)num_channels, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
         }
-        // =================  END OF MODIFIED SECTION  =================
 
         int depth = input.depth();
         int width = input.width();
@@ -91,11 +120,11 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
         CImg<float> padded_volume(padded_width, padded_height, padded_depth, num_channels, 0.0f);
 
         // 复制原始数据到padded volume的中心
-       if (pad_depth_before>=0 && pad_width_before>=0 && pad_height_before>=0){
+        if (pad_depth_before>=0 && pad_width_before>=0 && pad_height_before>=0){
             cimg_forXYZC(input, x, y, z, c) {
                 padded_volume(x + pad_width_before, y + pad_height_before, z + pad_depth_before, c) = input(x, y, z, c);
             }
-        }else{
+        } else {
             padded_volume = input;
         }
         
@@ -147,7 +176,7 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
         size_t input_patch_voxel_numel = config.patch_size[0] * config.patch_size[1] * config.patch_size[2];
         size_t output_patch_vol_sz = config.num_classes * config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float);
 
-        // 输出tile总体信息
+        // 输出tile总体信息（环外：保留）
         int total_tiles = X_num_steps * Y_num_steps * Z_num_steps;
         std::cout << "Total tiles to process: " << total_tiles << endl;
         std::cout << "Tile grid: " << X_num_steps << " x " << Y_num_steps << " x " << Z_num_steps << " (X x Y x Z)" << endl;
@@ -181,11 +210,13 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
 
                     patch_count += 1;
                     
-                    // 输出当前tile信息
-                    std::cout << "\nProcessing tile #" << patch_count << "/" << total_tiles << "..." << endl;
-                    std::cout << "  Position: [" << lb_x << "-" << ub_x << ", " 
-                              << lb_y << "-" << ub_y << ", " 
-                              << lb_z << "-" << ub_z << "]" << endl;
+                    // —— 瓦片级日志：仅在需要时打印 ——
+                    if (UnetDebug::ShouldLogTile(patch_count)) {
+                        std::cout << "\nProcessing tile #" << patch_count << "/" << total_tiles << "..." << std::endl;
+                        std::cout << "  Position: [" << lb_x << "-" << ub_x << ", " 
+                                  << lb_y << "-" << ub_y << ", " 
+                                  << lb_z << "-" << ub_z << "]" << std::endl;
+                    }
 
                     // 提取patch
                     CImg<float> input_patch;
@@ -200,8 +231,8 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                         return UnetSegAI_STATUS_FAIED;
                     }
 
-                    // 获取推理前的GPU内存状态
-                    SystemMonitor::GPUInfo gpu_before = SystemMonitor::getGPUInfo();
+                    // —— GPU 采样：仅在需要时采样（避免每瓦片 cuda 查询） ——
+                    auto gpu_before = MaybeSampleGPU(patch_count);
                     
                     // 记录tile推理开始时间
                     auto tile_start = std::chrono::steady_clock::now();
@@ -217,17 +248,19 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                     auto tile_end = std::chrono::steady_clock::now();
                     std::chrono::duration<double> tile_elapsed = tile_end - tile_start;
                     
-                    // 获取推理后的GPU内存状态
-                    SystemMonitor::GPUInfo gpu_after = SystemMonitor::getGPUInfo();
+                    // —— GPU 采样：仅在需要时采样 ——
+                    auto gpu_after = MaybeSampleGPU(patch_count);
                     
-                    // 输出tile性能信息
-                    std::cout << "  Tile inference time: " << std::fixed << std::setprecision(3) 
-                              << tile_elapsed.count() << "s" << std::endl;
-                    if (gpu_after.available) {
-                        std::cout << "  GPU memory: " << SystemMonitor::formatBytes(gpu_after.usedMemory) 
-                                  << " / " << SystemMonitor::formatBytes(gpu_after.totalMemory)
-                                  << " (" << std::fixed << std::setprecision(1) 
-                                  << gpu_after.memoryUsagePercent << "%)" << std::endl;
+                    // —— 瓦片级性能信息：仅在需要时打印 ——
+                    if (UnetDebug::ShouldLogTile(patch_count)) {
+                        std::cout << "  Tile inference time: " << std::fixed << std::setprecision(3) 
+                                  << tile_elapsed.count() << "s" << std::endl;
+                        if (gpu_after.valid) {
+                            std::cout << "  GPU memory: " << SystemMonitor::formatBytes(gpu_after.usedBytes) 
+                                      << " / " << SystemMonitor::formatBytes(gpu_after.totalBytes)
+                                      << " (" << std::fixed << std::setprecision(1) 
+                                      << gpu_after.usagePercent << "%)" << std::endl;
+                        }
                     }
 
                     // 保存单个tile（如果启用了中间结果保存）
@@ -257,7 +290,9 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                         return UnetSegAI_STATUS_FAIED;
                     }
                     
-                    std::cout << "Tile #" << patch_count << " completed" << endl;
+                    if (UnetDebug::ShouldLogTile(patch_count)) {
+                        std::cout << "Tile #" << patch_count << " completed" << std::endl;
+                    }
                 }
             }
         }

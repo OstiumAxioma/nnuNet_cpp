@@ -110,7 +110,7 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
 
         // 缩放 X 和 Y 维度
         for (int i = 0; i < 2; ++i) {
-            float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
+            float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[1-i];
             int scaled_sz = std::round(input_size[i] * scaled_factor);
 
             //if (scaled_sz < config.patch_size[i]) {
@@ -125,7 +125,7 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
     } else {
         // 原始的3D情况处理逻辑：对所有三个维度进行重采样
         for (int i = 0; i < 3; ++i) {
-            float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[i];
+            float scaled_factor = parent->transposed_original_voxel_spacing[i] / config.voxel_spacing[2-i];
             int scaled_sz = std::round(input_size[i] * scaled_factor);
 
             //if (scaled_sz < config.patch_size[i])

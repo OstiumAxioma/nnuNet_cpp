@@ -7,10 +7,25 @@
 #include <cmath>
 #include <limits>
 #include <chrono>
+#include <memory>
+#include <numeric>
+#include <algorithm>
+#include <string>
 #include "../include/SystemMonitor.h"
 
 using namespace std;
 using namespace cimg_library;
+
+#if defined(__has_include)
+#if __has_include(<cuda_runtime_api.h>)
+#include <cuda_runtime_api.h>
+#define UNET_HAS_CUDA_RUNTIME 1
+#else
+#define UNET_HAS_CUDA_RUNTIME 0
+#endif
+#else
+#define UNET_HAS_CUDA_RUNTIME 0
+#endif
 
 namespace UnetDebug {
     // 默认关闭：不打印每瓦片日志，也不在环内调用 cudaMemGetInfo
@@ -41,6 +56,125 @@ static inline GPUSample MaybeSampleGPU(std::size_t tile_idx) {
     s.usagePercent = info.memoryUsagePercent;  
     return s;
 }
+
+static size_t SafeElementCount(const std::vector<int64_t>& dims) {
+    if (dims.empty()) {
+        return 0;
+    }
+    size_t count = 1;
+    for (int64_t dim : dims) {
+        if (dim <= 0) {
+            return 0;
+        }
+        count *= static_cast<size_t>(dim);
+    }
+    return count;
+}
+
+#if UNET_HAS_CUDA_RUNTIME
+static bool CheckCuda(cudaError_t err, const char* message) {
+    if (err != cudaSuccess) {
+        std::cerr << "[IoBinding] " << message << ": " << cudaGetErrorString(err) << std::endl;
+        return false;
+    }
+    return true;
+}
+
+struct InferenceIoBindingContext {
+    bool enabled = false;
+    Ort::IoBinding binding;
+    Ort::MemoryInfo device_memory;
+    std::vector<int64_t> input_shape;
+    std::vector<int64_t> output_shape;
+    size_t input_elements = 0;
+    size_t output_elements = 0;
+    size_t input_bytes = 0;
+    size_t output_bytes = 0;
+    float* device_input = nullptr;
+    float* device_output = nullptr;
+
+    InferenceIoBindingContext(Ort::Session& session,
+                              const std::vector<int64_t>& in_shape,
+                              const std::vector<int64_t>& out_shape)
+        : enabled(false),
+          binding(session),
+          device_memory("Cuda", OrtAllocatorType::OrtDeviceAllocator, 0, OrtMemTypeDefault),
+          input_shape(in_shape),
+          output_shape(out_shape) {
+        input_elements = SafeElementCount(input_shape);
+        output_elements = SafeElementCount(output_shape);
+        if (input_elements == 0 || output_elements == 0) {
+            std::cerr << "[IoBinding] Invalid tensor shape for CUDA binding." << std::endl;
+            return;
+        }
+        input_bytes = input_elements * sizeof(float);
+        output_bytes = output_elements * sizeof(float);
+
+        if (!CheckCuda(cudaMalloc(reinterpret_cast<void**>(&device_input), input_bytes), "cudaMalloc input buffer")) {
+            return;
+        }
+        if (!CheckCuda(cudaMalloc(reinterpret_cast<void**>(&device_output), output_bytes), "cudaMalloc output buffer")) {
+            cudaFree(device_input);
+            device_input = nullptr;
+            return;
+        }
+        enabled = true;
+    }
+
+    ~InferenceIoBindingContext() {
+        if (device_input) {
+            cudaFree(device_input);
+        }
+        if (device_output) {
+            cudaFree(device_output);
+        }
+    }
+
+    bool IsReady() const { return enabled; }
+
+    AI_INT Run(Ort::Session& session,
+               const float* host_input,
+               cimg_library::CImg<float>& host_output,
+               const char* input_name,
+               const char* output_name) {
+        if (!enabled || host_input == nullptr || host_output.data() == nullptr) {
+            return UnetSegAI_STATUS_FAIED;
+        }
+
+        if (!CheckCuda(cudaMemcpy(device_input, host_input, input_bytes, cudaMemcpyHostToDevice), "cudaMemcpy H2D")) {
+            return UnetSegAI_STATUS_FAIED;
+        }
+
+        binding.ClearBoundInputs();
+        binding.ClearBoundOutputs();
+
+        Ort::Value input_value = Ort::Value::CreateTensor<float>(
+            device_memory, device_input, input_elements, input_shape.data(), input_shape.size());
+        Ort::Value output_value = Ort::Value::CreateTensor<float>(
+            device_memory, device_output, output_elements, output_shape.data(), output_shape.size());
+
+        binding.BindInput(input_name, input_value);
+        binding.BindOutput(output_name, output_value);
+
+        session.Run(Ort::RunOptions{ nullptr }, binding);
+        binding.SynchronizeOutputs();
+
+        if (!CheckCuda(cudaMemcpy(host_output.data(), device_output, output_bytes, cudaMemcpyDeviceToHost), "cudaMemcpy D2H")) {
+            return UnetSegAI_STATUS_FAIED;
+        }
+
+        return UnetSegAI_STATUS_SUCCESS;
+    }
+};
+#else
+struct InferenceIoBindingContext {
+    InferenceIoBindingContext(Ort::Session&, const std::vector<int64_t>&, const std::vector<int64_t>&) {}
+    bool IsReady() const { return false; }
+    AI_INT Run(Ort::Session&, const float*, cimg_library::CImg<float>&, const char*, const char*) {
+        return UnetSegAI_STATUS_FAIED;
+    }
+};
+#endif
 
 // 主推理函数 - 滑窗推理
 AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
@@ -87,6 +221,33 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
             // config.patch_size for 3D is assumed to be {depth, height, width}
             input_tensor_shape = { 1, (int64_t)num_channels, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
         }
+
+        std::vector<int64_t> output_tensor_shape;
+        if (is_2d) {
+            output_tensor_shape = { 1, static_cast<int64_t>(config.num_classes), config.patch_size[0], config.patch_size[1] };
+        } else {
+            output_tensor_shape = { 1, static_cast<int64_t>(config.num_classes), config.patch_size[0], config.patch_size[1], config.patch_size[2] };
+        }
+
+        std::unique_ptr<InferenceIoBindingContext> io_binding_context;
+#if UNET_HAS_CUDA_RUNTIME
+        bool has_cuda_provider = false;
+        try {
+            auto providers = Ort::GetAvailableProviders();
+            has_cuda_provider = std::find(providers.begin(), providers.end(), std::string("CUDAExecutionProvider")) != providers.end();
+        } catch (const std::exception& e) {
+            std::cerr << "[IoBinding] Unable to query session providers: " << e.what() << std::endl;
+        }
+
+        if (has_cuda_provider) {
+            auto candidate = std::make_unique<InferenceIoBindingContext>(*session, input_tensor_shape, output_tensor_shape);
+            if (candidate->IsReady()) {
+                io_binding_context = std::move(candidate);
+            } else {
+                std::cerr << "[IoBinding] Failed to initialize CUDA IO binding buffers. Falling back to CPU tensors." << std::endl;
+            }
+        }
+#endif
 
         int depth = input.depth();
         int width = input.width();
@@ -239,7 +400,7 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                     
                     // 执行单个patch推理
                     AI_INT status = inferPatch(*session, input_patch, win_pob, 
-                                              input_tensor_shape, input_name_cstr, output_name_cstr);
+                                              input_tensor_shape, input_name_cstr, output_name_cstr, io_binding_context.get());
                     if (status != UnetSegAI_STATUS_SUCCESS) {
                         return status;
                     }
@@ -384,25 +545,33 @@ AI_INT UnetInference::inferPatch(Ort::Session& session,
                                 CImg<float>& output,
                                 const std::vector<int64_t>& input_shape,
                                 const char* input_name,
-                                const char* output_name)
+                                const char* output_name,
+                                InferenceIoBindingContext* io_context)
 {
     try {
         // 获取输入数据指针
-        float* input_data_ptr = const_cast<float*>(patch.data());
-        size_t input_patch_voxel_numel = input_shape[2] * input_shape[3] * input_shape[4];
-        
-        // 验证输入数据
+        const float* input_data_ptr = patch.data();
         if (input_data_ptr == nullptr) {
             return UnetSegAI_STATUS_FAIED;
         }
 
+        if (io_context && io_context->IsReady()) {
+            return io_context->Run(session, input_data_ptr, output, input_name, output_name);
+        }
+
+        size_t input_element_count = SafeElementCount(input_shape);
+        if (input_element_count == 0) {
+            std::cerr << "inferPatch: invalid input tensor shape." << std::endl;
+            return UnetSegAI_STATUS_FAIED;
+        }
+        
         // 创建ONNX内存信息和输入张量
         Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(
             OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault);
 
         Ort::Value input_tensor = Ort::Value::CreateTensor<float>(memory_info, 
-            input_data_ptr,
-            input_patch_voxel_numel,
+            const_cast<float*>(input_data_ptr),
+            input_element_count,
             input_shape.data(),
             input_shape.size());
 
@@ -428,7 +597,7 @@ AI_INT UnetInference::inferPatch(Ort::Session& session,
         }
 
         // 计算输出大小
-        size_t output_patch_vol_sz = output.width() * output.height() * output.depth() * output.spectrum() * sizeof(float);
+        size_t output_patch_vol_sz = static_cast<size_t>(output.size()) * sizeof(float);
         
         // 复制到输出CImg
         std::memcpy(output.data(), output_data, output_patch_vol_sz);

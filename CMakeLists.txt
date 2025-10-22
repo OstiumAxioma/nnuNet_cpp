@@ -127,7 +127,7 @@ endif()
 # 设置VS工程的启动项目
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT testToothSegmentation)
 
-# 设置Visual Studio调试器工作目录为可执行文件所在目录
+# 设置VS调试器工作目录为可执行程序目录
 set_property(TARGET testToothSegmentation PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:testToothSegmentation>")
 
 # 显示配置信息

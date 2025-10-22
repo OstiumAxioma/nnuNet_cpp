@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <chrono>
+#include <string>
 #include "CImg.h"
 #include "onnxruntime_cxx_api.h"
 
@@ -11,6 +12,8 @@
 class UnetMain;
 struct nnUNetConfig;
 typedef int AI_INT;
+
+struct InferenceIoBindingContext;
 
 class UnetInference {
 public:
@@ -34,7 +37,8 @@ private:
                             cimg_library::CImg<float>& output,
                             const std::vector<int64_t>& input_shape,
                             const char* input_name,
-                            const char* output_name);
+                            const char* output_name,
+                            InferenceIoBindingContext* io_context);
 };
 
 #endif // _UNET_INFERENCE_H_

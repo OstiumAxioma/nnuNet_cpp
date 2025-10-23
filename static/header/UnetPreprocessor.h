@@ -35,10 +35,9 @@ private:
                                    double& intensity_mean,
                                    double& intensity_std);
     
-    // 重采样
-    static void resampleVolume(const cimg_library::CImg<float>& input,
-                              cimg_library::CImg<float>& output,
-                              const std::vector<int64_t>& output_size);
+    // 重采样（就地调整大小）
+    static void resampleVolume(cimg_library::CImg<float>& volume,
+                               const std::vector<int64_t>& output_size);
 };
 
 #endif // _UNET_PREPROCESSOR_H_

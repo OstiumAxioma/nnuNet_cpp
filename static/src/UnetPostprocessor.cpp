@@ -18,6 +18,7 @@ AI_INT UnetPostprocessor::processSegmentationMask(UnetMain* parent,
     
     // 步骤1：对概率图执行argmax（在转置后的坐标系中）
     CImg<short> output_seg_mask = argmaxSpectrum(prob_volume);
+    prob_volume.assign(); // 释放概率体，降低内存占用
     
     // 保存后处理数据（在转置撤销前）
     if (parent && parent->saveIntermediateResults && !parent->postprocessOutputPath.empty()) {
@@ -55,6 +56,8 @@ AI_INT UnetPostprocessor::processSegmentationMask(UnetMain* parent,
         long volSize = parent->Width0 * parent->Height0 * parent->Depth0 * sizeof(short);
         std::memcpy(dstData->ptr_Data, output_seg_mask.data(), volSize);
     }
+    
+    output_seg_mask.assign(); // 后续不再需要中间mask，及时释放内存
     
     // 将保存的origin信息传回给调用者
     dstData->OriginX = parent->imageMetadata.origin[0];

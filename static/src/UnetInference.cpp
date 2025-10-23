@@ -459,8 +459,24 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
         }
 
         // 归一化
-        cimg_forXYZC(padded_output_prob, x, y, z, c) {
-            padded_output_prob(x, y, z, c) /= count_vol(x, y, z);
+        cimg_forXYZ(padded_output_prob, x, y, z) {
+            const float weight = count_vol(x, y, z);
+            if (weight > 1e-6f) {
+                cimg_forC(padded_output_prob, c) {
+                    padded_output_prob(x, y, z, c) /= weight;
+                }
+            } else {
+                // 没有瓦片覆盖该体素，保持为0并发出调试警告（一次性）
+                static bool warned_zero_weight = false;
+                if (!warned_zero_weight) {
+                    std::cerr << "[SlidingWindow] Warning: encountered voxel with zero accumulation weight. "
+                              << "This indicates some region was not covered by any tile." << std::endl;
+                    warned_zero_weight = true;
+                }
+                cimg_forC(padded_output_prob, c) {
+                    padded_output_prob(x, y, z, c) = 0.0f;
+                }
+            }
         }
         
         // 从padded结果中提取原始尺寸的输出

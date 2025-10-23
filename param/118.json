@@ -1,0 +1,61 @@
+{
+    "all_labels": [
+        0,
+        1
+    ],
+    "num_classes": 2,
+    "num_input_channels": 1,
+    "patch_size": [
+        160,
+        112,
+        112
+    ],
+    "target_spacing": [
+        1.0,
+        0.40909765660762787,
+        0.40909765660762787
+    ],
+    "transpose_forward": [
+        0,
+        1,
+        2
+    ],
+    "transpose_backward": [
+        0,
+        1,
+        2
+    ],
+    "intensity_properties": {
+        "0": {
+            "max": 2514.0,
+            "mean": 539.52001953125,
+            "median": 283.0,
+            "min": -1017.0,
+            "percentile_00_5": -205.0,
+            "percentile_99_5": 1948.0,
+            "std": 618.6915283203125
+        }
+    },
+    "normalization_schemes": [
+        "CTNormalization"
+    ],
+    "use_mask_for_norm": [
+        false
+    ],
+    "resampling_fn_data": "resample_data_or_seg_to_shape",
+    "resampling_fn_data_kwargs": {
+        "is_seg": false,
+        "order": 3,
+        "order_z": 0,
+        "force_separate_z": null
+    },
+    "resampling_fn_probabilities": "resample_data_or_seg_to_shape",
+    "resampling_fn_probabilities_kwargs": {
+        "is_seg": false,
+        "order": 1,
+        "order_z": 0,
+        "force_separate_z": null
+    },
+    "use_tta": null,
+    "configuration": "3d_fullres"
+}

@@ -257,29 +257,43 @@ bool ConfigParser::parseBoolArray(const std::string& jsonContent, const std::str
 }
 
 bool ConfigParser::parseIntensityProperties(const std::string& jsonContent, ModelConfig& config) {
-    std::string searchKey = "\"intensity_properties\":";
-    size_t intensity_pos = jsonContent.find(searchKey);
-    if (intensity_pos == std::string::npos) return false;
-    size_t obj_start = jsonContent.find("{", intensity_pos + searchKey.length());
-    if (obj_start == std::string::npos) return false;
-    // --- 查找匹配的 '}' ---
-    size_t obj_end = std::string::npos;
-    int brace_count = 0;
-    for (size_t i = obj_start; i < jsonContent.length(); ++i) {
-        if (jsonContent[i] == '{') {
-            brace_count++;
-        } else if (jsonContent[i] == '}') {
-            brace_count--;
-            if (brace_count == 0) {
-                obj_end = i;
-                break;
+    auto extractObjectForKey = [&](const std::string& key, std::string& out_object) -> bool {
+        size_t key_pos = jsonContent.find(key);
+        if (key_pos == std::string::npos) {
+            return false;
+        }
+        size_t brace_start = jsonContent.find("{", key_pos + key.length());
+        if (brace_start == std::string::npos) {
+            return false;
+        }
+        size_t brace_end = std::string::npos;
+        int brace_count = 0;
+        for (size_t i = brace_start; i < jsonContent.length(); ++i) {
+            if (jsonContent[i] == '{') {
+                ++brace_count;
+            } else if (jsonContent[i] == '}') {
+                --brace_count;
+                if (brace_count == 0) {
+                    brace_end = i;
+                    break;
+                }
             }
         }
+        if (brace_end == std::string::npos) {
+            return false;
+        }
+        out_object = jsonContent.substr(brace_start, brace_end - brace_start + 1);
+        return true;
+    };
+
+    std::string intensity_obj_str;
+    if (!extractObjectForKey("\"intensity_properties\":", intensity_obj_str)) {
+        // 兼容新的键名称，例如foreground_intensity_properties_per_channel
+        if (!extractObjectForKey("\"foreground_intensity_properties_per_channel\":", intensity_obj_str)) {
+            return false;
+        }
     }
-    // --- 查找结束 ---
-    if (obj_end == std::string::npos) return false; // 没有找到匹配的 '}'
-    // 提取整个 intensity_properties 对象的完整内容
-    std::string intensity_obj_str = jsonContent.substr(obj_start, obj_end - obj_start + 1);
+
     // 清空现有的配置
     config.mean.clear();
     config.std.clear();
@@ -320,13 +334,39 @@ bool ConfigParser::parseIntensityProperties(const std::string& jsonContent, Mode
     if (parseIntValue(jsonContent, "num_input_channels", num_channels_from_json)) {
         config.num_input_channels = num_channels_from_json;
         if (channel_index > 0 && channel_index != num_channels_from_json) {
-            std::cerr << "Warning: Number of channels in 'intensity_properties' (" << channel_index 
+            std::cerr << "Warning: Number of channels in intensity properties (" << channel_index 
                       << ") does not match 'num_input_channels' (" << num_channels_from_json << ")." << std::endl;
         }
     } else if (channel_index > 0) {
         config.num_input_channels = channel_index;
     }
-    return !config.mean.empty(); // 如果成功解析了至少一个通道的mean，就返回true
+
+    const size_t expected_channels = static_cast<size_t>(config.num_input_channels);
+    auto ensure_size = [&](auto& vec, auto fill_value) {
+        if (vec.size() < expected_channels) {
+            vec.resize(expected_channels, fill_value);
+        }
+    };
+
+    ensure_size(config.mean, 0.0f);
+    ensure_size(config.std, 1.0f);
+    ensure_size(config.min_val, 0.0f);
+    ensure_size(config.max_val, 1.0f);
+    ensure_size(config.percentile_00_5, 0.0f);
+    ensure_size(config.percentile_99_5, 1.0f);
+
+    // 如果解析失败，保持原有默认值
+    if (config.mean.empty()) {
+        config.mean.assign(1, 0.0f);
+        config.std.assign(1, 1.0f);
+        config.min_val.assign(1, 0.0f);
+        config.max_val.assign(1, 1.0f);
+        config.percentile_00_5.assign(1, 0.0f);
+        config.percentile_99_5.assign(1, 1.0f);
+        return false;
+    }
+
+    return true; // 至少解析了一个通道
 }
 
 void ConfigParser::applyConfigToUnet(const ModelConfig& modelConfig, nnUNetConfig& unetConfig) {

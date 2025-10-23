@@ -136,12 +136,11 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
     }
 
     // 步骤5：归一化（在原始分辨率上进行）
-    CImg<float> normalized_volume;
-    normalized_volume.assign(cropped_volume);  // 转换为float
+    output_volume.assign(cropped_volume);  // 转换为float
+    cropped_volume.assign();               // 释放裁剪阶段的缓冲
     
     // 保存归一化前的数据
     if (parent->saveIntermediateResults && !parent->preprocessOutputPath.empty()) {
-        // 创建UnetIO需要的ImageMetadata类型
         ::ImageMetadata metadata;
         metadata.origin[0] = parent->imageMetadata.origin[0];
         metadata.origin[1] = parent->imageMetadata.origin[1];
@@ -149,12 +148,12 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
         metadata.spacing[0] = parent->imageMetadata.spacing[0];
         metadata.spacing[1] = parent->imageMetadata.spacing[1];
         metadata.spacing[2] = parent->imageMetadata.spacing[2];
-        UnetIO::savePreprocessedData(normalized_volume, parent->preprocessOutputPath, L"before_normalization", metadata);
+        UnetIO::savePreprocessedData(output_volume, parent->preprocessOutputPath, L"before_normalization", metadata);
     }
-
+    
     // 执行归一化（逐通道）
     for (int c = 0; c < num_channels; ++c) {
-        CImg<float> channel_view = normalized_volume.get_shared_channel(c);
+        CImg<float> channel_view = output_volume.get_shared_channel(c);
         const std::string& norm_scheme = config.normalization_schemes[c];
 
         if (norm_scheme == "CTNormalization" || norm_scheme == "CT" || norm_scheme == "ct") {
@@ -170,15 +169,7 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
     }
 
     // 步骤6：重采样（在归一化后进行）
-    if (is_volume_scaled) {
-        resampleVolume(normalized_volume, output_volume, output_size);
-    } else {
-        output_volume.assign(normalized_volume);
-    }
-
-    // 保存预处理后的数据
     if (parent->saveIntermediateResults && !parent->preprocessOutputPath.empty()) {
-        // 创建UnetIO需要的ImageMetadata类型
         ::ImageMetadata metadata;
         metadata.origin[0] = parent->imageMetadata.origin[0];
         metadata.origin[1] = parent->imageMetadata.origin[1];
@@ -186,11 +177,23 @@ AI_INT UnetPreprocessor::preprocessVolume(UnetMain* parent,
         metadata.spacing[0] = parent->imageMetadata.spacing[0];
         metadata.spacing[1] = parent->imageMetadata.spacing[1];
         metadata.spacing[2] = parent->imageMetadata.spacing[2];
-        // 保存归一化后但重采样前的数据
-        UnetIO::savePreprocessedData(normalized_volume, parent->preprocessOutputPath, 
+        UnetIO::savePreprocessedData(output_volume, parent->preprocessOutputPath,
                                     L"after_normalization_before_resample", metadata);
-        // 保存最终的预处理数据
-        UnetIO::savePreprocessedData(output_volume, parent->preprocessOutputPath, 
+    }
+
+    if (is_volume_scaled) {
+        resampleVolume(output_volume, output_size);
+    }
+
+    if (parent->saveIntermediateResults && !parent->preprocessOutputPath.empty()) {
+        ::ImageMetadata metadata;
+        metadata.origin[0] = parent->imageMetadata.origin[0];
+        metadata.origin[1] = parent->imageMetadata.origin[1];
+        metadata.origin[2] = parent->imageMetadata.origin[2];
+        metadata.spacing[0] = parent->imageMetadata.spacing[0];
+        metadata.spacing[1] = parent->imageMetadata.spacing[1];
+        metadata.spacing[2] = parent->imageMetadata.spacing[2];
+        UnetIO::savePreprocessedData(output_volume, parent->preprocessOutputPath,
                                     L"preprocessed_normalized_volume", metadata);
     }
 
@@ -297,13 +300,31 @@ CImg<short> UnetPreprocessor::cropToNonzero(const CImg<short>& input, CropBBox& 
 // CT归一化 - 修改为处理单个通道，并使用channel_index获取参数
 void UnetPreprocessor:: CTNormalization(CImg<float>& volume_channel, const nnUNetConfig& config, int channel_index)
 {
-    // 使用对应通道的percentile值进行裁剪
+    const auto has_stats =
+        channel_index < static_cast<int>(config.percentile_00_5s.size()) &&
+        channel_index < static_cast<int>(config.percentile_99_5s.size()) &&
+        channel_index < static_cast<int>(config.means.size()) &&
+        channel_index < static_cast<int>(config.stds.size());
+
+    if (!has_stats) {
+        std::cerr << "Warning: Missing CT normalization stats for channel "
+                  << channel_index << ". Falling back to Z-Score normalization." << std::endl;
+        double mean_val = volume_channel.mean();
+        double std_val = std::sqrt(volume_channel.variance());
+        if (std_val < 1e-8) std_val = 1e-8;
+        volume_channel -= mean_val;
+        volume_channel /= std_val;
+        return;
+    }
+
     double lower_bound = config.percentile_00_5s[channel_index];
     double upper_bound = config.percentile_99_5s[channel_index];
+    if (lower_bound > upper_bound) {
+        std::swap(lower_bound, upper_bound);
+    }
     
     volume_channel.cut(lower_bound, upper_bound);
 
-    // 应用对应通道的z-score标准化
     double mean_hu = config.means[channel_index];
     double std_hu = config.stds[channel_index];
     if (std_hu < 1e-8) std_hu = 1e-8;
@@ -465,15 +486,17 @@ void UnetPreprocessor::ZScoreNormalization(CImg<float>& volume_channel,
 }
 
 // 重采样
-void UnetPreprocessor::resampleVolume(const CImg<float>& input,
-                                     CImg<float>& output,
+void UnetPreprocessor::resampleVolume(CImg<float>& volume,
                                      const std::vector<int64_t>& output_size)
 {
     if (output_size.size() != 3) {
         throw std::runtime_error("Output size must be 3D");
     }
     
-    // 使用三次插值（5）而不是线性插值（3）以匹配Python的order=3
-    // CImg插值模式: 0=最近邻, 1=线性, 2=移动平均, 3=线性, 5=三次(cubic)
-    output = input.get_resize(output_size[0], output_size[1], output_size[2], -100, 5);
+    // 使用三次插值（5）以匹配Python的order=3。resize会在内部重新分配并释放旧内存。
+    volume.resize(output_size[0],
+                  output_size[1],
+                  output_size[2],
+                  volume.spectrum(),
+                  5);
 }

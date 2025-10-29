@@ -298,6 +298,30 @@ AI_INT UnetMain::initializeSession()
 			const int64_t model_depth    = input_shape[2];
 			const int64_t model_height   = input_shape[3];
 			const int64_t model_width    = input_shape[4];
+			std::cout << "Model input shape (N,C,D,H,W): [" << input_shape[0] << ", "
+			          << model_channels << ", " << model_depth << ", "
+			          << model_height << ", " << model_width << "]" << std::endl;
+
+			// 也读取输出形状，确认类别数
+			auto output_shape = semantic_seg_session_ptr->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+			if (output_shape.size() == 5) {
+				const int64_t model_classes = output_shape[1];
+				std::cout << "Model output shape (N,C,D,H,W): [" << output_shape[0] << ", "
+				          << model_classes << ", " << output_shape[2] << ", "
+				          << output_shape[3] << ", " << output_shape[4] << "]" << std::endl;
+				if (model_classes > 0 && model_classes != unetConfig.num_classes) {
+					std::cerr << "Warning: Model outputs " << model_classes
+					          << " classes, configuration specifies "
+					          << unetConfig.num_classes << ". Using model value." << std::endl;
+					unetConfig.num_classes = static_cast<int>(model_classes);
+				}
+			} else {
+				std::cout << "Model output shape: ";
+				for (size_t i = 0; i < output_shape.size(); ++i) {
+					std::cout << output_shape[i] << (i + 1 < output_shape.size() ? " x " : "");
+				}
+				std::cout << std::endl;
+			}
 
 			if (model_channels > 0 && model_channels != unetConfig.input_channels) {
 				std::cerr << "Warning: Model expects " << model_channels

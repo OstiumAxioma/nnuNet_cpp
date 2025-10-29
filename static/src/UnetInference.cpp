@@ -491,6 +491,9 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
             output = padded_output_prob;
         }
         
+        const float min_weight = count_vol.min();
+        const float max_weight = count_vol.max();
+        std::cout << "Sliding window accumulation weight range: [" << min_weight << ", " << max_weight << "]" << std::endl;
         std::cout << "Sliding window inference is done." << endl;
         return UnetSegAI_STATUS_SUCCESS;
         

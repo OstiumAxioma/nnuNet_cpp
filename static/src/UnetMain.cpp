@@ -285,69 +285,113 @@ AI_INT UnetMain::initializeSession()
 		cached_input_name = std::string(input_name_ptr.get());
 		cached_output_name = std::string(output_name_ptr.get());
 		
-		// 验证模型输入形状
-			auto input_shape = semantic_seg_session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
-			if (input_shape.size() != 5) {
-				std::cerr << "Error: Expected 5D input tensor, got " << input_shape.size() << "D" << std::endl;
-				semantic_seg_session_ptr.reset();
-				return UnetSegAI_LOADING_FAIED;
-			}
+		// 验证模型输入/输出形状，兼容2D与3D模型
+		auto input_shape = semantic_seg_session_ptr->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+		const bool is_2d_model = (input_shape.size() == 4);
+		if (!is_2d_model && input_shape.size() != 5) {
+			std::cerr << "Error: Unexpected input tensor dimensions: " << input_shape.size() << "D" << std::endl;
+			semantic_seg_session_ptr.reset();
+			return UnetSegAI_LOADING_FAIED;
+		}
 
-			// 同步配置中的patch_size与模型实际输入尺寸，避免维度不匹配
-			const int64_t model_channels = input_shape[1];
-			const int64_t model_depth    = input_shape[2];
-			const int64_t model_height   = input_shape[3];
-			const int64_t model_width    = input_shape[4];
-			std::cout << "Model input shape (N,C,D,H,W): [" << input_shape[0] << ", "
-			          << model_channels << ", " << model_depth << ", "
-			          << model_height << ", " << model_width << "]" << std::endl;
+		const int64_t model_channels = (input_shape.size() > 1) ? input_shape[1] : -1;
+		std::vector<int64_t> model_patch_size;
 
-			// 也读取输出形状，确认类别数
-			auto output_shape = semantic_seg_session_ptr->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
-			if (output_shape.size() == 5) {
-				const int64_t model_classes = output_shape[1];
-				std::cout << "Model output shape (N,C,D,H,W): [" << output_shape[0] << ", "
-				          << model_classes << ", " << output_shape[2] << ", "
-				          << output_shape[3] << ", " << output_shape[4] << "]" << std::endl;
-				if (model_classes > 0 && model_classes != unetConfig.num_classes) {
-					std::cerr << "Warning: Model outputs " << model_classes
-					          << " classes, configuration specifies "
-					          << unetConfig.num_classes << ". Using model value." << std::endl;
-					unetConfig.num_classes = static_cast<int>(model_classes);
-				}
-			} else {
-				std::cout << "Model output shape: ";
-				for (size_t i = 0; i < output_shape.size(); ++i) {
-					std::cout << output_shape[i] << (i + 1 < output_shape.size() ? " x " : "");
-				}
-				std::cout << std::endl;
-			}
+		if (is_2d_model) {
+			int64_t model_height = input_shape[2];
+			int64_t model_width  = input_shape[3];
+			std::cout << "Model input shape (N,C,H,W): [" << input_shape[0] << ", "
+			          << model_channels << ", " << model_height << ", "
+			          << model_width << "]" << std::endl;
 
-			if (model_channels > 0 && model_channels != unetConfig.input_channels) {
-				std::cerr << "Warning: Model expects " << model_channels
-				          << " input channels, but configuration specifies "
-				          << unetConfig.input_channels << ". Using model value." << std::endl;
-				unetConfig.input_channels = static_cast<int>(model_channels);
-			}
-
-			if (model_depth > 0 && model_height > 0 && model_width > 0) {
-				std::vector<int64_t> model_patch_size = { model_depth, model_height, model_width };
-				if (unetConfig.patch_size.size() != 3 ||
-				    unetConfig.patch_size[0] != model_depth ||
-				    unetConfig.patch_size[1] != model_height ||
-				    unetConfig.patch_size[2] != model_width) {
-					std::cout << "Updating patch size to match model input: "
-					          << model_depth << " x " << model_height << " x " << model_width << std::endl;
-					unetConfig.patch_size = model_patch_size;
-				}
+			if (model_height > 0 && model_width > 0) {
+				model_patch_size = { model_height, model_width };
 			} else {
 				std::cerr << "Warning: Model input shape contains dynamic dimensions; "
 				          << "current configuration patch size will be used." << std::endl;
 			}
+		} else {
+			int64_t model_depth  = input_shape[2];
+			int64_t model_height = input_shape[3];
+			int64_t model_width  = input_shape[4];
+			std::cout << "Model input shape (N,C,D,H,W): [" << input_shape[0] << ", "
+			          << model_channels << ", " << model_depth << ", "
+			          << model_height << ", " << model_width << "]" << std::endl;
 
-			std::cout << "Session initialized successfully" << std::endl;
-			std::cout << "Input name: " << cached_input_name << std::endl;
-			std::cout << "Output name: " << cached_output_name << std::endl;
+			if (model_depth > 0 && model_height > 0 && model_width > 0) {
+				model_patch_size = { model_depth, model_height, model_width };
+			} else {
+				std::cerr << "Warning: Model input shape contains dynamic dimensions; "
+				          << "current configuration patch size will be used." << std::endl;
+			}
+		}
+
+		// 读取输出形状确认类别数
+		auto output_shape = semantic_seg_session_ptr->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+		if (is_2d_model && output_shape.size() == 4) {
+			const int64_t model_classes = output_shape[1];
+			std::cout << "Model output shape (N,C,H,W): [" << output_shape[0] << ", "
+			          << model_classes << ", " << output_shape[2] << ", "
+			          << output_shape[3] << "]" << std::endl;
+			if (model_classes > 0 && model_classes != unetConfig.num_classes) {
+				std::cerr << "Warning: Model outputs " << model_classes
+				          << " classes, configuration specifies "
+				          << unetConfig.num_classes << ". Using model value." << std::endl;
+				unetConfig.num_classes = static_cast<int>(model_classes);
+			}
+		} else if (!is_2d_model && output_shape.size() == 5) {
+			const int64_t model_classes = output_shape[1];
+			std::cout << "Model output shape (N,C,D,H,W): [" << output_shape[0] << ", "
+			          << model_classes << ", " << output_shape[2] << ", "
+			          << output_shape[3] << ", " << output_shape[4] << "]" << std::endl;
+			if (model_classes > 0 && model_classes != unetConfig.num_classes) {
+				std::cerr << "Warning: Model outputs " << model_classes
+				          << " classes, configuration specifies "
+				          << unetConfig.num_classes << ". Using model value." << std::endl;
+				unetConfig.num_classes = static_cast<int>(model_classes);
+			}
+		} else {
+			std::cout << "Model output shape: ";
+			for (size_t i = 0; i < output_shape.size(); ++i) {
+				std::cout << output_shape[i] << (i + 1 < output_shape.size() ? " x " : "");
+			}
+			std::cout << std::endl;
+		}
+
+		if (model_channels > 0 && model_channels != unetConfig.input_channels) {
+			std::cerr << "Warning: Model expects " << model_channels
+			          << " input channels, but configuration specifies "
+			          << unetConfig.input_channels << ". Using model value." << std::endl;
+			unetConfig.input_channels = static_cast<int>(model_channels);
+		}
+
+		if (!model_patch_size.empty()) {
+			bool patch_mismatch = (unetConfig.patch_size.size() != model_patch_size.size());
+			if (!patch_mismatch) {
+				for (size_t i = 0; i < model_patch_size.size(); ++i) {
+					if (unetConfig.patch_size[i] != model_patch_size[i]) {
+						patch_mismatch = true;
+						break;
+					}
+				}
+			}
+
+			if (patch_mismatch) {
+				if (is_2d_model) {
+					std::cout << "Updating patch size to match model input: "
+					          << model_patch_size[0] << " x " << model_patch_size[1] << std::endl;
+				} else {
+					std::cout << "Updating patch size to match model input: "
+					          << model_patch_size[0] << " x " << model_patch_size[1]
+					          << " x " << model_patch_size[2] << std::endl;
+				}
+				unetConfig.patch_size = model_patch_size;
+			}
+		}
+
+		std::cout << "Session initialized successfully" << std::endl;
+		std::cout << "Input name: " << cached_input_name << std::endl;
+		std::cout << "Output name: " << cached_output_name << std::endl;
 		
 		session_initialized = true;
 		return UnetSegAI_STATUS_SUCCESS;
@@ -396,20 +440,20 @@ AI_INT  UnetMain::setInput(AI_DataInfo *srcData)
 	float fovY = float(Height0) * voxelSpacingX;
 	float fovZ = float(Depth0) * voxelSpacingZ;
 
-	if (Height0 < 64 || Width0 < 64 || Depth0 < 64)
-		return UnetSegAI_STATUS_VOLUME_SMALL; //输入体积太小�
+	//if (Height0 < 64 || Width0 < 64 || Depth0 < 64)
+	//	return UnetSegAI_STATUS_VOLUME_SMALL; //输入体积太小
 
-	if (Height0 > 4096 || Width0 > 4096 || Depth0 > 2048)
-		return UnetSegAI_STATUS_VOLUME_LARGE; //输入体积太大
+	//if (Height0 > 4096 || Width0 > 4096 || Depth0 > 2048)
+	//	return UnetSegAI_STATUS_VOLUME_LARGE; //输入体积太大
 
-	if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volume太小�
-		return UnetSegAI_STATUS_VOLUME_SMALL;
+	//if (fovX < 30.f || fovY < 30.f || fovZ < 30.f) //volume太小
+	//	return UnetSegAI_STATUS_VOLUME_SMALL;
 
-	if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacing太小�
-		return UnetSegAI_STATUS_VOLUME_LARGE;
+	//if (voxelSpacing < 0.04f || voxelSpacingX < 0.04f || voxelSpacingY < 0.04f || voxelSpacingZ < 0.04f) //voxelSpacing太小
+	//	return UnetSegAI_STATUS_VOLUME_LARGE;
 
-	if (voxelSpacing > 1.1f || voxelSpacingX > 1.1f || voxelSpacingY > 1.1f || voxelSpacingZ > 1.1f)
-		return UnetSegAI_STATUS_VOLUME_SMALL; //voxelSpacing太大
+	//if (voxelSpacing > 1.1f || voxelSpacingX > 1.1f || voxelSpacingY > 1.1f || voxelSpacingZ > 1.1f)
+	//	return UnetSegAI_STATUS_VOLUME_SMALL; //voxelSpacing太大
 
 	// 创建CImg对象并复制数据
 	//RAI: 右-前-上坐标系，与医学图像标准一致

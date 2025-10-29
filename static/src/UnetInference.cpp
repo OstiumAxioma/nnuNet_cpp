@@ -185,49 +185,42 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                                       const std::string& input_name,
                                       const std::string& output_name)
 {
-    // Session已经在外部初始化，直接使用
     if (session == nullptr) {
         std::cerr << "Error: Session pointer is null" << std::endl;
         return UnetSegAI_LOADING_FAIED;
     }
-    
+
     const char* input_name_cstr = input_name.c_str();
     const char* output_name_cstr = output_name.c_str();
-    
+
     try {
         auto input_shape = session->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+        const bool is_2d = (config.patch_size.size() == 2);
 
-        if (input_shape.size() != 5) {
-            throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
+        if (is_2d) {
+            if (input_shape.size() != 4) {
+                throw std::runtime_error("Expected 4D input for a 2D model (batch, channels, height, width)");
+            }
+            if (config.patch_size.size() != 2) {
+                throw std::runtime_error("Patch size should be 2D (height, width) for a 2D model");
+            }
+        } else {
+            if (input_shape.size() != 5) {
+                throw std::runtime_error("Expected 5D input (batch, channels, depth, height, width)");
+            }
+            if (config.patch_size.size() != 3) {
+                throw std::runtime_error("Patch size should be 3D (depth, height, width)");
+            }
         }
 
-        // 验证patch_size
-        if (config.patch_size.size() != 3) {
-            throw std::runtime_error("Patch size should be 3D (depth, height, width)");
-        }
         const int num_channels = config.input_channels;
-        
-        // 判断是否为2D情况（与UnetPreprocessor.cpp中的逻辑一致）
-        bool is_2d = config.voxel_spacing.size() == 2;
-        
-        // 根据2D/3D情况构建ONNX输入张量的形状
-        std::vector<int64_t> input_tensor_shape;
-        if (is_2d) {
-            // ONNX 2D张量形状: (batch, channel, height, width)
-            // config.patch_size for 2D is assumed to be {height, width}
-            input_tensor_shape = { 1, (int64_t)num_channels, config.patch_size[0], config.patch_size[1] };
-        } else {
-            // ONNX 3D张量形状: (batch, channel, depth, height, width)
-            // config.patch_size for 3D is assumed to be {depth, height, width}
-            input_tensor_shape = { 1, (int64_t)num_channels, config.patch_size[0], config.patch_size[1], config.patch_size[2] };
-        }
+        std::vector<int64_t> input_tensor_shape = is_2d
+            ? std::vector<int64_t>{ 1, static_cast<int64_t>(num_channels), config.patch_size[0], config.patch_size[1] }
+            : std::vector<int64_t>{ 1, static_cast<int64_t>(num_channels), config.patch_size[0], config.patch_size[1], config.patch_size[2] };
 
-        std::vector<int64_t> output_tensor_shape;
-        if (is_2d) {
-            output_tensor_shape = { 1, static_cast<int64_t>(config.num_classes), config.patch_size[0], config.patch_size[1] };
-        } else {
-            output_tensor_shape = { 1, static_cast<int64_t>(config.num_classes), config.patch_size[0], config.patch_size[1], config.patch_size[2] };
-        }
+        std::vector<int64_t> output_tensor_shape = is_2d
+            ? std::vector<int64_t>{ 1, static_cast<int64_t>(config.num_classes), config.patch_size[0], config.patch_size[1] }
+            : std::vector<int64_t>{ 1, static_cast<int64_t>(config.num_classes), config.patch_size[0], config.patch_size[1], config.patch_size[2] };
 
         std::unique_ptr<InferenceIoBindingContext> io_binding_context;
 #if UNET_HAS_CUDA_RUNTIME
@@ -249,208 +242,241 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
         }
 #endif
 
-        int depth = input.depth();
-        int width = input.width();
-        int height = input.height();
-        
-        // Padding步骤
+        const int depth = input.depth();
+        const int width = input.width();
+        const int height = input.height();
+
         int padded_depth = depth;
         int padded_width = width;
         int padded_height = height;
-        
-        // 如果尺寸小于patch_size，需要padding到至少patch_size
-        if (padded_depth < config.patch_size[0]) {
-            padded_depth = config.patch_size[0];
-        }
-        if (padded_height < config.patch_size[1]) {
-            padded_height = config.patch_size[1];
-        }
-        if (padded_width < config.patch_size[2]) {
-            padded_width = config.patch_size[2];
-        }
-        
-        // 计算padding量
-        int pad_depth_before = (padded_depth - depth) / 2;
-        int pad_depth_after = padded_depth - depth - pad_depth_before;
-        int pad_width_before = (padded_width - width) / 2;
-        int pad_width_after = padded_width - width - pad_width_before;
-        int pad_height_before = (padded_height - height) / 2;
-        int pad_height_after = padded_height - height - pad_height_before;
-        
-        // 创建padded volume
-        CImg<float> padded_volume(padded_width, padded_height, padded_depth, num_channels, 0.0f);
 
-        // 复制原始数据到padded volume的中心
-        if (pad_depth_before>=0 && pad_width_before>=0 && pad_height_before>=0){
+        if (is_2d) {
+            if (padded_height < config.patch_size[0]) padded_height = static_cast<int>(config.patch_size[0]);
+            if (padded_width  < config.patch_size[1]) padded_width  = static_cast<int>(config.patch_size[1]);
+        } else {
+            if (padded_depth  < config.patch_size[0]) padded_depth  = static_cast<int>(config.patch_size[0]);
+            if (padded_height < config.patch_size[1]) padded_height = static_cast<int>(config.patch_size[1]);
+            if (padded_width  < config.patch_size[2]) padded_width  = static_cast<int>(config.patch_size[2]);
+        }
+
+        int pad_depth_before = (padded_depth - depth) / 2;
+        int pad_depth_after  = padded_depth - depth - pad_depth_before;
+        int pad_width_before = (padded_width - width) / 2;
+        int pad_width_after  = padded_width - width - pad_width_before;
+        int pad_height_before = (padded_height - height) / 2;
+        int pad_height_after  = padded_height - height - pad_height_before;
+
+        CImg<float> padded_volume(padded_width, padded_height, padded_depth, num_channels, 0.0f);
+        if (pad_depth_before >= 0 && pad_width_before >= 0 && pad_height_before >= 0) {
             cimg_forXYZC(input, x, y, z, c) {
-                padded_volume(x + pad_width_before, y + pad_height_before, z + pad_depth_before, c) = input(x, y, z, c);
+                padded_volume(x + pad_width_before,
+                              y + pad_height_before,
+                              z + pad_depth_before,
+                              c) = input(x, y, z, c);
             }
         } else {
             padded_volume = input;
         }
-        
-        // 使用padded dimensions进行后续计算
-        int working_depth = padded_depth;
-        int working_width = padded_width;
+
+        int working_depth  = padded_depth;
+        int working_width  = padded_width;
         int working_height = padded_height;
 
-        float step_size_ratio = config.step_size_ratio;
-        
-        // 计算目标步长
-        float target_step_x = config.patch_size[2] * step_size_ratio;
-        float target_step_y = config.patch_size[1] * step_size_ratio;
-        float target_step_z = config.patch_size[0] * step_size_ratio;
-        
-        // 计算步数
-        int X_num_steps = std::max(1, (int)ceil(float(working_width - config.patch_size[2]) / target_step_x) + 1);
-        int Y_num_steps = std::max(1, (int)ceil(float(working_height - config.patch_size[1]) / target_step_y) + 1);
-        int Z_num_steps = std::max(1, (int)ceil(float(working_depth - config.patch_size[0]) / target_step_z) + 1);
-        
-        // 计算实际步长
-        float actualStepSize[3];
-        if (X_num_steps > 1) {
-            actualStepSize[0] = float(working_width - config.patch_size[2]) / (X_num_steps - 1);
+        const float step_size_ratio = config.step_size_ratio;
+
+        int X_num_steps = 0;
+        int Y_num_steps = 0;
+        int Z_num_steps = 0;
+        float actualStepSize[3] = { 0.f, 0.f, 0.f };
+
+        if (is_2d) {
+            const int64_t patch_h = config.patch_size[0];
+            const int64_t patch_w = config.patch_size[1];
+
+            float target_step_y = patch_h * step_size_ratio;
+            float target_step_x = patch_w * step_size_ratio;
+
+            Y_num_steps = std::max(1, static_cast<int>(std::ceil(float(working_height - patch_h) / target_step_y) + 1));
+            X_num_steps = std::max(1, static_cast<int>(std::ceil(float(working_width - patch_w) / target_step_x) + 1));
+            Z_num_steps = working_depth;
+
+            actualStepSize[0] = (X_num_steps > 1) ? float(working_width - patch_w) / (X_num_steps - 1) : 0.f;
+            actualStepSize[1] = (Y_num_steps > 1) ? float(working_height - patch_h) / (Y_num_steps - 1) : 0.f;
+            actualStepSize[2] = 1.0f;
         } else {
-            actualStepSize[0] = 0;
-        }
-        
-        if (Y_num_steps > 1) {
-            actualStepSize[1] = float(working_height - config.patch_size[1]) / (Y_num_steps - 1);
-        } else {
-            actualStepSize[1] = 0;
-        }
-        
-        if (Z_num_steps > 1) {
-            actualStepSize[2] = float(working_depth - config.patch_size[0]) / (Z_num_steps - 1);
-        } else {
-            actualStepSize[2] = 0;
+            const int64_t patch_d = config.patch_size[0];
+            const int64_t patch_h = config.patch_size[1];
+            const int64_t patch_w = config.patch_size[2];
+
+            float target_step_z = patch_d * step_size_ratio;
+            float target_step_y = patch_h * step_size_ratio;
+            float target_step_x = patch_w * step_size_ratio;
+
+            Z_num_steps = std::max(1, static_cast<int>(std::ceil(float(working_depth - patch_d) / target_step_z) + 1));
+            Y_num_steps = std::max(1, static_cast<int>(std::ceil(float(working_height - patch_h) / target_step_y) + 1));
+            X_num_steps = std::max(1, static_cast<int>(std::ceil(float(working_width - patch_w) / target_step_x) + 1));
+
+            actualStepSize[0] = (X_num_steps > 1) ? float(working_width - patch_w) / (X_num_steps - 1) : 0.f;
+            actualStepSize[1] = (Y_num_steps > 1) ? float(working_height - patch_h) / (Y_num_steps - 1) : 0.f;
+            actualStepSize[2] = (Z_num_steps > 1) ? float(working_depth - patch_d) / (Z_num_steps - 1) : 0.f;
         }
 
-        // 初始化输出概率体
-        CImg<float> padded_output_prob = CImg<float>(working_width, working_height, working_depth, config.num_classes, 0.f);
-        CImg<float> count_vol = CImg<float>(working_width, working_height, working_depth, 1, 0.f);
-        
-        CImg<float> win_pob = CImg<float>(config.patch_size[2], config.patch_size[1], config.patch_size[0], config.num_classes, 0.f);
-        CImg<float> gaussisan_weight = CImg<float>(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.f);
+        CImg<float> padded_output_prob(working_width, working_height, working_depth, config.num_classes, 0.f);
+        CImg<float> count_vol(working_width, working_height, working_depth, 1, 0.f);
+
+        CImg<float> win_pob;
+        CImg<float> gaussisan_weight;
+        if (is_2d) {
+            win_pob.assign(config.patch_size[1], config.patch_size[0], 1, config.num_classes, 0.f);
+            gaussisan_weight.assign(config.patch_size[1], config.patch_size[0], 1, 1, 0.f);
+        } else {
+            win_pob.assign(config.patch_size[2], config.patch_size[1], config.patch_size[0], config.num_classes, 0.f);
+            gaussisan_weight.assign(config.patch_size[2], config.patch_size[1], config.patch_size[0], 1, 0.f);
+        }
         createGaussianKernel(gaussisan_weight, config.patch_size);
 
-        size_t input_patch_voxel_numel = config.patch_size[0] * config.patch_size[1] * config.patch_size[2];
-        size_t output_patch_vol_sz = config.num_classes * config.patch_size[0] * config.patch_size[1] * config.patch_size[2] * sizeof(float);
+        const int total_tiles = X_num_steps * Y_num_steps * Z_num_steps;
+        std::cout << "Total tiles to process: " << total_tiles << std::endl;
+        if (is_2d) {
+            std::cout << "Tile grid (2D): " << X_num_steps << " x " << Y_num_steps
+                      << " per slice, slices: " << Z_num_steps << std::endl;
+            std::cout << "Patch size: " << config.patch_size[1] << " x " << config.patch_size[0]
+                      << " (W x H)" << std::endl;
+        } else {
+            std::cout << "Tile grid (3D): " << X_num_steps << " x " << Y_num_steps << " x " << Z_num_steps
+                      << " (X x Y x Z)" << std::endl;
+            std::cout << "Patch size: " << config.patch_size[2] << " x " << config.patch_size[1]
+                      << " x " << config.patch_size[0] << " (W x H x D)" << std::endl;
+        }
 
-        // 输出tile总体信息（环外：保留）
-        int total_tiles = X_num_steps * Y_num_steps * Z_num_steps;
-        std::cout << "Total tiles to process: " << total_tiles << endl;
-        std::cout << "Tile grid: " << X_num_steps << " x " << Y_num_steps << " x " << Z_num_steps << " (X x Y x Z)" << endl;
-        std::cout << "Patch size: " << config.patch_size[2] << " x " << config.patch_size[1] << " x " << config.patch_size[0] << " (W x H x D)" << endl;
-        
-        // 处理每个patch
         int patch_count = 0;
-        for (int sz = 0; sz < Z_num_steps; sz++) {
-            int lb_z = (int)std::round(sz * actualStepSize[2]);
-            if (lb_z + config.patch_size[0] > working_depth) {
-                lb_z = working_depth - config.patch_size[0];
+        for (int sz = 0; sz < Z_num_steps; ++sz) {
+            int lb_z = 0;
+            int ub_z = 0;
+            if (is_2d) {
+                lb_z = sz;
+                ub_z = lb_z;
+            } else {
+                const int64_t patch_d = config.patch_size[0];
+                lb_z = static_cast<int>(std::round(sz * actualStepSize[2]));
+                if (lb_z + patch_d > working_depth) {
+                    lb_z = working_depth - static_cast<int>(patch_d);
+                }
+                lb_z = std::max(0, lb_z);
+                ub_z = lb_z + static_cast<int>(patch_d) - 1;
             }
-            lb_z = std::max(0, lb_z);
-            int ub_z = lb_z + config.patch_size[0] - 1;
 
-            for (int sy = 0; sy < Y_num_steps; sy++) {
-                int lb_y = (int)std::round(sy * actualStepSize[1]);
-                if (lb_y + config.patch_size[1] > working_height) {
-                    lb_y = working_height - config.patch_size[1];
+            for (int sy = 0; sy < Y_num_steps; ++sy) {
+                const int64_t patch_h = is_2d ? config.patch_size[0] : config.patch_size[1];
+                int lb_y = static_cast<int>(std::round(sy * actualStepSize[1]));
+                if (lb_y + patch_h > working_height) {
+                    lb_y = working_height - static_cast<int>(patch_h);
                 }
                 lb_y = std::max(0, lb_y);
-                int ub_y = lb_y + config.patch_size[1] - 1;
+                int ub_y = lb_y + static_cast<int>(patch_h) - 1;
 
-                for (int sx = 0; sx < X_num_steps; sx++) {
-                    int lb_x = (int)std::round(sx * actualStepSize[0]);
-                    if (lb_x + config.patch_size[2] > working_width) {
-                        lb_x = working_width - config.patch_size[2];
+                for (int sx = 0; sx < X_num_steps; ++sx) {
+                    const int64_t patch_w = is_2d ? config.patch_size[1] : config.patch_size[2];
+                    int lb_x = static_cast<int>(std::round(sx * actualStepSize[0]));
+                    if (lb_x + patch_w > working_width) {
+                        lb_x = working_width - static_cast<int>(patch_w);
                     }
                     lb_x = std::max(0, lb_x);
-                    int ub_x = lb_x + config.patch_size[2] - 1;
+                    int ub_x = lb_x + static_cast<int>(patch_w) - 1;
 
                     patch_count += 1;
-                    
-                    // —— 瓦片级日志：仅在需要时打印 ——
+
                     if (UnetDebug::ShouldLogTile(patch_count)) {
                         std::cout << "\nProcessing tile #" << patch_count << "/" << total_tiles << "..." << std::endl;
-                        std::cout << "  Position: [" << lb_x << "-" << ub_x << ", " 
-                                  << lb_y << "-" << ub_y << ", " 
-                                  << lb_z << "-" << ub_z << "]" << std::endl;
+                        if (is_2d) {
+                            std::cout << "  Position: [" << lb_x << "-" << ub_x << ", "
+                                      << lb_y << "-" << ub_y << "] slice " << lb_z << std::endl;
+                        } else {
+                            std::cout << "  Position: [" << lb_x << "-" << ub_x << ", "
+                                      << lb_y << "-" << ub_y << ", "
+                                      << lb_z << "-" << ub_z << "]" << std::endl;
+                        }
                     }
 
-                    // 提取patch
                     CImg<float> input_patch;
                     try {
-                        input_patch = padded_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z, 0);
-                        if (input_patch.width() != config.patch_size[2] || 
-                            input_patch.height() != config.patch_size[1] || 
-                            input_patch.depth() != config.patch_size[0]) {
-                            return UnetSegAI_STATUS_FAIED;
-                        }
+                        input_patch = padded_volume.get_crop(lb_x, lb_y, lb_z, ub_x, ub_y, ub_z);
                     } catch (const CImgException& e) {
+                        std::cerr << "Error extracting patch: " << e.what() << std::endl;
                         return UnetSegAI_STATUS_FAIED;
                     }
 
-                    // —— GPU 采样：仅在需要时采样（避免每瓦片 cuda 查询） ——
+                    if (is_2d) {
+                        if (input_patch.width() != config.patch_size[1] ||
+                            input_patch.height() != config.patch_size[0] ||
+                            input_patch.depth() != 1) {
+                            return UnetSegAI_STATUS_FAIED;
+                        }
+                    } else {
+                        if (input_patch.width() != config.patch_size[2] ||
+                            input_patch.height() != config.patch_size[1] ||
+                            input_patch.depth() != config.patch_size[0]) {
+                            return UnetSegAI_STATUS_FAIED;
+                        }
+                    }
+
                     auto gpu_before = MaybeSampleGPU(patch_count);
-                    
-                    // 记录tile推理开始时间
+                    (void)gpu_before;
+
                     auto tile_start = std::chrono::steady_clock::now();
-                    
-                    // 执行单个patch推理
-                    AI_INT status = inferPatch(*session, input_patch, win_pob, 
-                                              input_tensor_shape, input_name_cstr, output_name_cstr, io_binding_context.get());
+
+                    AI_INT status = inferPatch(*session,
+                                               input_patch,
+                                               win_pob,
+                                               input_tensor_shape,
+                                               input_name_cstr,
+                                               output_name_cstr,
+                                               io_binding_context.get());
                     if (status != UnetSegAI_STATUS_SUCCESS) {
                         return status;
                     }
-                    
-                    // 记录tile推理结束时间
+
                     auto tile_end = std::chrono::steady_clock::now();
                     std::chrono::duration<double> tile_elapsed = tile_end - tile_start;
-                    
-                    // —— GPU 采样：仅在需要时采样 ——
+
                     auto gpu_after = MaybeSampleGPU(patch_count);
-                    
-                    // —— 瓦片级性能信息：仅在需要时打印 ——
+
                     if (UnetDebug::ShouldLogTile(patch_count)) {
-                        std::cout << "  Tile inference time: " << std::fixed << std::setprecision(3) 
+                        std::cout << "  Tile inference time: " << std::fixed << std::setprecision(3)
                                   << tile_elapsed.count() << "s" << std::endl;
                         if (gpu_after.valid) {
-                            std::cout << "  GPU memory: " << SystemMonitor::formatBytes(gpu_after.usedBytes) 
+                            std::cout << "  GPU memory: " << SystemMonitor::formatBytes(gpu_after.usedBytes)
                                       << " / " << SystemMonitor::formatBytes(gpu_after.totalBytes)
-                                      << " (" << std::fixed << std::setprecision(1) 
+                                      << " (" << std::fixed << std::setprecision(1)
                                       << gpu_after.usagePercent << "%)" << std::endl;
                         }
                     }
 
-                    // 保存单个tile（如果启用了中间结果保存）
                     if (parent && parent->saveIntermediateResults && !parent->modelOutputPath.empty()) {
                         UnetIO::saveTile(win_pob, patch_count, lb_x, lb_y, lb_z, parent->modelOutputPath);
                     }
 
-                    // 累加结果到输出概率体
                     try {
                         cimg_forXYZC(win_pob, x, y, z, c) {
                             int gx = lb_x + x;
                             int gy = lb_y + y;
                             int gz = lb_z + z;
-                            
-                            if (gx < 0 || gx >= working_width || 
-                                gy < 0 || gy >= working_height || 
+
+                            if (gx < 0 || gx >= working_width ||
+                                gy < 0 || gy >= working_height ||
                                 gz < 0 || gz >= working_depth) {
                                 return UnetSegAI_STATUS_FAIED;
                             }
-                            
+
                             padded_output_prob(gx, gy, gz, c) += (win_pob(x, y, z, c) * gaussisan_weight(x, y, z));
                         }
                         cimg_forXYZ(gaussisan_weight, x, y, z) {
                             count_vol(lb_x + x, lb_y + y, lb_z + z) += gaussisan_weight(x, y, z);
                         }
-                    } catch (const std::exception& e) {
+                    } catch (const std::exception&) {
                         return UnetSegAI_STATUS_FAIED;
                     }
-                    
+
                     if (UnetDebug::ShouldLogTile(patch_count)) {
                         std::cout << "Tile #" << patch_count << " completed" << std::endl;
                     }
@@ -458,7 +484,6 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
             }
         }
 
-        // 归一化
         cimg_forXYZ(padded_output_prob, x, y, z) {
             const float weight = count_vol(x, y, z);
             if (weight > 1e-6f) {
@@ -466,7 +491,6 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                     padded_output_prob(x, y, z, c) /= weight;
                 }
             } else {
-                // 没有瓦片覆盖该体素，保持为0并发出调试警告（一次性）
                 static bool warned_zero_weight = false;
                 if (!warned_zero_weight) {
                     std::cerr << "[SlidingWindow] Warning: encountered voxel with zero accumulation weight. "
@@ -478,87 +502,109 @@ AI_INT UnetInference::runSlidingWindow(UnetMain* parent,
                 }
             }
         }
-        
-        // 从padded结果中提取原始尺寸的输出
+
         output = CImg<float>(width, height, depth, config.num_classes, 0.f);
         if (pad_depth_before >= 0 && pad_width_before >= 0 && pad_height_before >= 0) {
             cimg_forXYZC(output, x, y, z, c) {
-                output(x, y, z, c) = padded_output_prob(x + pad_width_before, 
-                                                        y + pad_height_before, 
-                                                        z + pad_depth_before, c);
+                output(x, y, z, c) = padded_output_prob(x + pad_width_before,
+                                                        y + pad_height_before,
+                                                        z + pad_depth_before,
+                                                        c);
             }
         } else {
             output = padded_output_prob;
         }
-        
+
         const float min_weight = count_vol.min();
         const float max_weight = count_vol.max();
         std::cout << "Sliding window accumulation weight range: [" << min_weight << ", " << max_weight << "]" << std::endl;
-        std::cout << "Sliding window inference is done." << endl;
+        std::cout << "Sliding window inference is done." << std::endl;
         return UnetSegAI_STATUS_SUCCESS;
-        
+
     } catch (const Ort::Exception& e) {
-        std::cerr << "ONNX Runtime error: " << e.what() << endl;
+        std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
         return UnetSegAI_LOADING_FAIED;
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << endl;
+        std::cerr << "Error: " << e.what() << std::endl;
         return UnetSegAI_STATUS_FAIED;
     }
 }
 
-// 创建3D高斯核
-void UnetInference::createGaussianKernel(CImg<float>& gaussisan_weight, 
+// 创建高斯核（兼容2D和3D）
+void UnetInference::createGaussianKernel(CImg<float>& gaussisan_weight,
                                         const std::vector<int64_t>& patch_sizes)
 {
-    // 匹配Python版本：sigma_scale = 1/8
+    const bool is_2d = (patch_sizes.size() == 2);
     float sigma_scale = 1.0f / 8.0f;
     float value_scaling_factor = 10.0f;
 
-    int64_t depth  = patch_sizes[0];
-    int64_t height = patch_sizes[1]; 
-    int64_t width  = patch_sizes[2];
+    if (is_2d) {
+        int64_t height = patch_sizes[0];
+        int64_t width  = patch_sizes[1];
 
-    // 计算中心点坐标
-    float z_center = (depth - 1)  / 2.0f;
-    float y_center = (height - 1) / 2.0f;
-    float x_center = (width - 1)  / 2.0f;
+        float y_center = (height - 1) / 2.0f;
+        float x_center = (width - 1)  / 2.0f;
 
-    // 使用与Python相同的sigma计算方法
-    float z_sigma = depth  * sigma_scale;
-    float y_sigma = height * sigma_scale;
-    float x_sigma = width  * sigma_scale;
-    
-    float z_part = 0.f;
-    float y_part = 0.f;
-    float x_part = 0.f;
-    cimg_forXYZ(gaussisan_weight, x, y, z) {
-        z_part = std::exp(-0.5f * std::pow((z - z_center) / z_sigma, 2));
-        y_part = std::exp(-0.5f * std::pow((y - y_center) / y_sigma, 2));
-        x_part = std::exp(-0.5f * std::pow((x - x_center) / x_sigma, 2));
-        gaussisan_weight(x, y, z) = z_part * y_part * x_part;
+        float y_sigma = height * sigma_scale;
+        float x_sigma = width  * sigma_scale;
+
+        cimg_forXY(gaussisan_weight, x, y) {
+            float y_part = std::exp(-0.5f * std::pow((y - y_center) / y_sigma, 2));
+            float x_part = std::exp(-0.5f * std::pow((x - x_center) / x_sigma, 2));
+            gaussisan_weight(x, y, 0) = y_part * x_part;
+        }
+    } else {
+        int64_t depth  = patch_sizes[0];
+        int64_t height = patch_sizes[1];
+        int64_t width  = patch_sizes[2];
+
+        float z_center = (depth - 1)  / 2.0f;
+        float y_center = (height - 1) / 2.0f;
+        float x_center = (width - 1)  / 2.0f;
+
+        float z_sigma = depth  * sigma_scale;
+        float y_sigma = height * sigma_scale;
+        float x_sigma = width  * sigma_scale;
+
+        cimg_forXYZ(gaussisan_weight, x, y, z) {
+            float z_part = std::exp(-0.5f * std::pow((z - z_center) / z_sigma, 2));
+            float y_part = std::exp(-0.5f * std::pow((y - y_center) / y_sigma, 2));
+            float x_part = std::exp(-0.5f * std::pow((x - x_center) / x_sigma, 2));
+            gaussisan_weight(x, y, z) = z_part * y_part * x_part;
+        }
     }
 
-    // 匹配Python的归一化方法：除以max再乘以value_scaling_factor
     float max_val = gaussisan_weight.max();
     if (max_val > 0) {
         gaussisan_weight *= (value_scaling_factor / max_val);
     }
-    
-    // 处理0值（匹配Python：将0值设置为最小非零值）
+
     float min_non_zero = std::numeric_limits<float>::max();
-    cimg_forXYZ(gaussisan_weight, x, y, z) {
-        if (gaussisan_weight(x, y, z) > 0 && gaussisan_weight(x, y, z) < min_non_zero) {
-            min_non_zero = gaussisan_weight(x, y, z);
+    if (is_2d) {
+        cimg_forXY(gaussisan_weight, x, y) {
+            if (gaussisan_weight(x, y, 0) > 0 && gaussisan_weight(x, y, 0) < min_non_zero) {
+                min_non_zero = gaussisan_weight(x, y, 0);
+            }
         }
-    }
-    cimg_forXYZ(gaussisan_weight, x, y, z) {
-        if (gaussisan_weight(x, y, z) == 0) {
-            gaussisan_weight(x, y, z) = min_non_zero;
+        cimg_forXY(gaussisan_weight, x, y) {
+            if (gaussisan_weight(x, y, 0) == 0) {
+                gaussisan_weight(x, y, 0) = min_non_zero;
+            }
+        }
+    } else {
+        cimg_forXYZ(gaussisan_weight, x, y, z) {
+            if (gaussisan_weight(x, y, z) > 0 && gaussisan_weight(x, y, z) < min_non_zero) {
+                min_non_zero = gaussisan_weight(x, y, z);
+            }
+        }
+        cimg_forXYZ(gaussisan_weight, x, y, z) {
+            if (gaussisan_weight(x, y, z) == 0) {
+                gaussisan_weight(x, y, z) = min_non_zero;
+            }
         }
     }
 }
 
-// 执行单个patch的推理
 AI_INT UnetInference::inferPatch(Ort::Session& session,
                                 const CImg<float>& patch,
                                 CImg<float>& output,
